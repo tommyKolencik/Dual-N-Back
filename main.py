@@ -18,6 +18,8 @@ BASE_DIR = Path(__file__).resolve().parent
 POSITIONS = tuple(range(9))
 LETTERS = ("C", "H", "K", "L", "Q", "R", "S", "T")
 MATCH_PROBABILITY = 0.28
+MAX_N_LEVEL = 20
+MIN_SCORED_TRIALS = 7
 
 
 def create_app(test_config: dict | None = None) -> Flask:
@@ -84,8 +86,16 @@ def create_app(test_config: dict | None = None) -> Flask:
     def create_session():
         try:
             payload = _json_object()
-            n_level = _bounded_integer(payload.get("n_level", 2), "n_level", 1, 5)
+            n_level = _bounded_integer(
+                payload.get("n_level", 2), "n_level", 1, MAX_N_LEVEL
+            )
             rounds = _bounded_integer(payload.get("rounds", 20), "rounds", 12, 40)
+            if rounds < n_level + MIN_SCORED_TRIALS:
+                raise ValueError(
+                    f"rounds must be at least {n_level + MIN_SCORED_TRIALS} "
+                    f"for N={n_level}: {n_level} warm-up trials and at least "
+                    f"{MIN_SCORED_TRIALS} scored trials."
+                )
             interval_ms = _bounded_integer(
                 payload.get("interval_ms", 2500), "interval_ms", 1500, 4000
             )
@@ -306,7 +316,7 @@ def _score_session(session: dict, visual_responses: set[int], audio_responses: s
     hit_rate = round((total_hits / total_targets) * 100, 1) if total_targets else 100.0
     false_alarms = visual["false_alarms"] + audio["false_alarms"]
 
-    if accuracy >= 82 and hit_rate >= 70 and false_alarms <= 3 and n_level < 5:
+    if accuracy >= 82 and hit_rate >= 70 and false_alarms <= 3 and n_level < MAX_N_LEVEL:
         recommendation = {
             "n_level": n_level + 1,
             "message": "You caught most repeats with few extra presses. Try remembering one step further back.",

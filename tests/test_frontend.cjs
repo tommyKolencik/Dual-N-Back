@@ -67,7 +67,7 @@ function harness({ audio = true, storage = null } = {}) {
     if (!nodes.has(id)) nodes.set(id, new Element());
     return nodes.get(id);
   };
-  for (const [id, value, options] of [["n-level", "2", [1, 2, 3, 4, 5]], ["rounds", "20", [12, 20, 30, 40]], ["pace", "2500", [3000, 2500, 1900]]]) {
+  for (const [id, value, options] of [["n-level", "2", Array.from({ length: 20 }, (_, index) => index + 1)], ["rounds", "20", [12, 20, 30, 40]], ["pace", "2500", [3000, 2500, 1900]]]) {
     get(id).value = value;
     get(id).options = options.map((option) => ({ value: String(option) }));
   }
@@ -199,16 +199,152 @@ test("pause freezes responses and resumes the same remaining window without repl
   h.advance(90000);
   assert.equal(h.state.currentIndex, 2);
   assert.equal(h.state.audioResponses.size, 0);
-  assert.equal(h.get("visual-feedback").textContent, "Marked");
+  assert.equal(h.get("visual-feedback").textContent, "Right");
+  assert.equal(h.get("visual-match").classList.contains("correct"), true);
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
   h.run("resumeSession()");
   assert.equal(h.spoken.length, played);
-  assert.equal(h.get("visual-feedback").textContent, "Marked");
+  assert.equal(h.get("visual-feedback").textContent, "Right");
   h.advance(remaining - 1);
   assert.equal(h.state.currentIndex, 2);
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
   h.advance(1);
   assert.equal(h.state.currentIndex, 3);
   assert.equal(h.spoken.length, played + 1);
   assert.equal(h.get("visual-feedback").textContent, "A");
+  assert.equal(h.get("last-visual-result").textContent, "Position: correct match");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: missed match");
+});
+
+test("a real N-back match gets immediate feedback only on the pressed channel", async () => {
+  const h = harness();
+  await start(h);
+  h.advance(3000); // Cue 3 repeats cue 1 in both channels, but differs from cue 2.
+  const played = h.spoken.length;
+  h.run("registerResponse('visual')");
+  assert.equal(h.get("visual-feedback").textContent, "Right");
+  assert.equal(h.get("visual-response-detail").textContent, "Repeated position");
+  assert.equal(h.get("visual-match").classList.contains("correct"), true);
+  assert.equal(h.get("visual-match").classList.contains("registered"), true);
+  assert.equal(h.get("visual-match").attributes["aria-pressed"], "true");
+  assert.equal(h.get("audio-feedback").textContent, "L");
+  assert.equal(h.get("audio-match").classList.contains("correct"), false);
+  assert.equal(h.get("audio-match").attributes["aria-pressed"], "false");
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
+  h.run("registerResponse('visual'); registerResponse('audio')");
+  assert.equal(h.state.visualResponses.size, 1);
+  assert.equal(h.state.audioResponses.size, 1);
+  assert.equal(h.get("audio-feedback").textContent, "Right");
+  assert.equal(h.get("audio-response-detail").textContent, "Repeated letter");
+  assert.equal(h.spoken.length, played); // Verdicts never speak over the stimulus.
+});
+
+test("a wrong position mark and right sound mark receive independent verdicts", async () => {
+  const h = harness();
+  await start(h);
+  h.advance(4500); // Cue 4 has a new position, but repeats cue 2's letter.
+  h.run("registerResponse('visual')");
+  assert.equal(h.get("visual-feedback").textContent, "Wrong");
+  assert.equal(h.get("visual-response-detail").textContent, "Did not repeat");
+  assert.equal(h.get("visual-match").classList.contains("incorrect"), true);
+  assert.equal(h.get("visual-match").classList.contains("correct"), false);
+  assert.equal(h.get("audio-feedback").textContent, "L");
+  h.run("registerResponse('audio'); registerResponse('visual')");
+  assert.equal(h.get("audio-feedback").textContent, "Right");
+  assert.equal(h.get("audio-match").classList.contains("correct"), true);
+  assert.equal(h.state.visualResponses.size, 1);
+  h.advance(1500);
+  assert.equal(h.get("review-label").textContent, "Cue 4 result");
+  assert.equal(h.get("last-visual-result").textContent, "Position: wrong match");
+  assert.equal(h.get("last-visual-result").dataset.outcome, "incorrect");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: correct match");
+  assert.equal(h.get("last-audio-result").dataset.outcome, "correct");
+  assert.equal(h.get("visual-match").classList.contains("incorrect"), false);
+  assert.equal(h.get("visual-feedback").textContent, "A");
+  assert.equal(h.get("visual-response-detail").textContent, "Same square, N steps ago");
+});
+
+test("wrong sound marks use letter comparison rather than position comparison", async () => {
+  const h = harness();
+  const pending = h.run("startSession()");
+  const cues = session();
+  cues.trials[2].letter = "H";
+  h.requests[0].resolve(response(cues));
+  await pending;
+  h.advance(5100);
+  h.run("registerResponse('audio')");
+  assert.equal(h.get("audio-feedback").textContent, "Wrong");
+  assert.equal(h.get("audio-response-detail").textContent, "Did not repeat");
+  assert.equal(h.get("audio-match").classList.contains("incorrect"), true);
+  assert.equal(h.get("visual-feedback").textContent, "A");
+  h.advance(1500);
+  assert.equal(h.get("last-audio-result").textContent, "Sound: wrong match");
+  assert.equal(h.get("last-audio-result").dataset.outcome, "incorrect");
+  assert.equal(h.get("last-visual-result").textContent, "Position: missed match");
+});
+
+test("warm-up cues ignore input and never create a scored review", async () => {
+  const h = harness();
+  await start(h);
+  h.run("registerResponse('visual'); registerResponse('audio')");
+  h.advance(1500);
+  h.run("registerResponse('visual'); registerResponse('audio')");
+  h.advance(1500);
+  assert.equal(h.state.currentIndex, 2);
+  assert.equal(h.state.visualResponses.size, 0);
+  assert.equal(h.state.audioResponses.size, 0);
+  assert.equal(h.get("visual-feedback").textContent, "A");
+  assert.equal(h.get("audio-feedback").textContent, "L");
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
+  assert.equal(h.get("last-visual-result").dataset.outcome, "neutral");
+  assert.equal(h.get("last-audio-result").dataset.outcome, "neutral");
+});
+
+test("misses and correct passes appear only when their response window closes", async () => {
+  const h = harness();
+  await start(h);
+  h.advance(4499);
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
+  assert.equal(h.get("visual-feedback").textContent, "A");
+  assert.equal(h.get("audio-feedback").textContent, "L");
+  h.advance(1);
+  assert.equal(h.get("review-label").textContent, "Cue 3 result");
+  assert.equal(h.get("last-visual-result").textContent, "Position: missed match");
+  assert.equal(h.get("last-visual-result").dataset.outcome, "missed");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: missed match");
+  h.advance(1499);
+  assert.equal(h.get("review-label").textContent, "Cue 3 result");
+  h.advance(1);
+  assert.equal(h.get("review-label").textContent, "Cue 4 result");
+  assert.equal(h.get("last-visual-result").textContent, "Position: correct pass");
+  assert.equal(h.get("last-visual-result").dataset.outcome, "correct");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: missed match");
+  assert.equal(h.get("visual-feedback").textContent, "A");
+  assert.equal(h.get("audio-feedback").textContent, "L");
+});
+
+test("the final cue is reviewed before scoring and a new session clears its review", async () => {
+  const h = harness();
+  await start(h);
+  h.advance(6000);
+  h.run("registerResponse('visual')");
+  h.advance(1500);
+  assert.equal(h.state.status, "submitting");
+  assert.equal(h.get("review-label").textContent, "Cue 5 result");
+  assert.equal(h.get("last-visual-result").textContent, "Position: correct match");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: missed match");
+  h.requests.at(-1).resolve(response(result()));
+  await flush();
+  h.get("close-results").emit("click");
+  assert.equal(h.get("results-dialog").open, false);
+  assert.equal(h.get("review-label").textContent, "Cue 5 result");
+  const pending = h.run("startSession()");
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
+  assert.equal(h.get("last-visual-result").textContent, "Position: —");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: —");
+  assert.equal(h.get("last-visual-result").dataset.outcome, "neutral");
+  h.requests.at(-1).resolve(response(session("next-session")));
+  await pending;
 });
 
 test("hidden tabs pause during countdown and require an explicit resume", async () => {
@@ -273,13 +409,71 @@ test("reset clears response marks and all active timers", async () => {
   const h = harness();
   await start(h);
   h.advance(3000);
+  h.run("registerResponse('visual'); registerResponse('audio')");
+  h.advance(1500);
   h.run("registerResponse('visual'); registerResponse('audio'); resetSession()");
   h.advance(90000);
   assert.equal(h.state.currentIndex, -1);
   assert.equal(h.get("visual-feedback").textContent, "A");
   assert.equal(h.get("audio-feedback").textContent, "L");
   assert.equal(h.get("visual-match").attributes["aria-pressed"], "false");
+  assert.equal(h.get("visual-match").classList.contains("incorrect"), false);
+  assert.equal(h.get("audio-match").classList.contains("correct"), false);
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
+  assert.equal(h.get("last-visual-result").textContent, "Position: —");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: —");
+  assert.equal(h.get("last-visual-result").dataset.outcome, "neutral");
+  assert.equal(h.get("last-audio-result").dataset.outcome, "neutral");
   assert.equal(h.get("trial-current").textContent, "0");
   assert.equal(h.document.body.classList.contains("session-active"), false);
   await flush();
+});
+
+test("level controls reach 20 and keep enough scored trials after warm-up", () => {
+  const h = harness();
+  for (let index = 0; index < 25; index += 1) h.get("level-up").emit("click");
+  assert.equal(h.get("n-level").value, "20");
+  assert.equal(h.get("level-display").textContent, "20");
+  assert.equal(h.get("level-up").disabled, true);
+  assert.equal(h.get("rounds").value, "30");
+  assert.match(h.get("level-help").textContent, /20 turns earlier/);
+  assert.equal(h.get("round-details").textContent, "20 warm-up + 10 scored trials");
+  assert.deepEqual(h.get("rounds").options.map(option => option.disabled), [true, true, false, false]);
+  for (let index = 0; index < 15; index += 1) h.get("level-down").emit("click");
+  assert.equal(h.get("level-up").disabled, false);
+  assert.equal(h.get("rounds").options[0].disabled, false);
+});
+
+test("restored high levels correct a short saved length before session creation", async () => {
+  const h = harness({ storage: JSON.stringify({ level: "20", rounds: "12", pace: "2500", volume: "80" }) });
+  assert.equal(h.get("n-level").value, "20");
+  assert.equal(h.get("rounds").value, "30");
+  const pending = h.run("startSession()");
+  assert.deepEqual(JSON.parse(h.requests[0].options.body), { n_level: 20, rounds: 30, interval_ms: 2500 });
+  h.run("resetSession()");
+  h.requests[0].resolve(response(session()));
+  await pending;
+});
+
+test("20-back ignores the first twenty cues and accepts responses on cue twenty-one", async () => {
+  const h = harness({ storage: JSON.stringify({ level: "20", rounds: "30", pace: "2500" }) });
+  const pending = h.run("startSession()");
+  h.requests[0].resolve(response({
+    session_id: "twenty-back", n_level: 20, rounds: 30, interval_ms: 2500,
+    trials: Array.from({ length: 30 }, (_, index) => ({ position: index % 9, letter: index % 2 ? "R" : "C" })),
+  }));
+  await pending;
+  h.advance(2100 + 19 * 2500);
+  h.run("registerResponse('visual'); registerResponse('audio')");
+  assert.equal(h.get("trial-current").textContent, "20");
+  assert.equal(h.state.visualResponses.size, 0);
+  assert.equal(h.state.audioResponses.size, 0);
+  assert.equal(h.get("visual-match").disabled, true);
+  h.advance(2500);
+  h.run("registerResponse('visual'); registerResponse('audio')");
+  assert.equal(h.get("trial-current").textContent, "21");
+  assert.equal(h.get("visual-match").disabled, false);
+  assert.equal(h.state.visualResponses.has(20), true);
+  assert.equal(h.state.audioResponses.has(20), true);
+  h.run("resetSession()");
 });

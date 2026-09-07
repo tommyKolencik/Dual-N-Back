@@ -1,6 +1,6 @@
 const elements = Object.fromEntries([
   ["connection", "connection-status"], ["resetButton", "reset-button"],
-  ["nLevel", "n-level"], ["rounds", "rounds"], ["pace", "pace"],
+  ["nLevel", "n-level"], ["rounds", "rounds"], ["roundDetails", "round-details"], ["pace", "pace"],
   ["levelHelp", "level-help"], ["levelDown", "level-down"], ["levelUp", "level-up"],
   ["levelDisplay", "level-display"], ["timeEstimate", "time-estimate"],
   ["startButton", "start-button"], ["pauseButton", "pause-button"],
@@ -12,6 +12,9 @@ const elements = Object.fromEntries([
   ["responsePrompt", "response-prompt"], ["visualMatch", "visual-match"],
   ["audioMatch", "audio-match"], ["visualFeedback", "visual-feedback"],
   ["audioFeedback", "audio-feedback"], ["historyList", "history-list"],
+  ["visualResponseDetail", "visual-response-detail"], ["audioResponseDetail", "audio-response-detail"],
+  ["reviewLabel", "review-label"], ["lastVisualResult", "last-visual-result"],
+  ["lastAudioResult", "last-audio-result"],
   ["historySummary", "history-summary"], ["sessionCount", "session-count"],
   ["bestScore", "best-score"], ["lastScore", "last-score"],
   ["dialog", "results-dialog"], ["closeResults", "close-results"],
@@ -32,6 +35,8 @@ const state = {
   runToken: 0, speechToken: 0, historyToken: 0, recommendation: null,
 };
 const preferencesKey = "nback.preferences.v1";
+const maxNLevel = 20;
+const minScoredTrials = 7;
 const levelWords = ["one", "two", "three", "four", "five"];
 const countdownInterval = 700;
 
@@ -122,16 +127,25 @@ function renderRail() {
 
 function updateSetupCopy() {
   const level = Number(elements.nLevel.value);
+  // Keep enough comparisons after the N warm-up cues, including at 20-back.
+  const minimumRounds = level + minScoredTrials;
+  for (const option of elements.rounds.options) {
+    option.disabled = Number(option.value) < minimumRounds;
+  }
+  if (Number(elements.rounds.value) < minimumRounds) {
+    elements.rounds.value = [...elements.rounds.options].find((option) => !option.disabled).value;
+  }
   const rounds = Number(elements.rounds.value);
   const seconds = Math.ceil(rounds * Number(elements.pace.value) / 1000);
-  elements.levelHelp.textContent = `Compare each cue with the one from ${levelWords[level - 1]} turn${level === 1 ? "" : "s"} earlier.`;
+  elements.levelHelp.textContent = `Compare each cue with the one from ${levelWords[level - 1] ?? level} turn${level === 1 ? "" : "s"} earlier.`;
+  text(elements.roundDetails, `${level} warm-up + ${rounds - level} scored trials`);
   elements.timeEstimate.textContent = seconds < 60 ? `${seconds} sec` : `${Math.floor(seconds / 60)} min${seconds % 60 ? ` ${seconds % 60} sec` : ""}`;
   text(elements.levelDisplay, level);
   elements.currentLevel.textContent = String(level);
   elements.trialTotal.textContent = String(rounds);
   stageCopy(level, "Ready when you are", "Watch the position. Listen to the letter.");
   if (elements.levelDown) elements.levelDown.disabled = elements.nLevel.disabled || level <= 1;
-  if (elements.levelUp) elements.levelUp.disabled = elements.nLevel.disabled || level >= 5;
+  if (elements.levelUp) elements.levelUp.disabled = elements.nLevel.disabled || level >= maxNLevel;
   renderRail();
   updateClock();
 }
@@ -147,7 +161,7 @@ function setControlsLocked(locked) {
     if (control) control.disabled = locked;
   }
   if (elements.levelDown) elements.levelDown.disabled = locked || Number(elements.nLevel.value) <= 1;
-  if (elements.levelUp) elements.levelUp.disabled = locked || Number(elements.nLevel.value) >= 5;
+  if (elements.levelUp) elements.levelUp.disabled = locked || Number(elements.nLevel.value) >= maxNLevel;
 }
 
 function clearTimers() {
@@ -165,12 +179,44 @@ function setMatchControls(enabled) {
 }
 
 function clearMarks() {
-  elements.visualMatch.classList.remove("registered");
-  elements.audioMatch.classList.remove("registered");
+  elements.visualMatch.classList.remove("registered", "correct", "incorrect");
+  elements.audioMatch.classList.remove("registered", "correct", "incorrect");
   elements.visualMatch.setAttribute("aria-pressed", "false");
   elements.audioMatch.setAttribute("aria-pressed", "false");
   text(elements.visualFeedback, "A");
   text(elements.audioFeedback, "L");
+  text(elements.visualResponseDetail, "Same square, N steps ago");
+  text(elements.audioResponseDetail, "Same letter, N steps ago");
+}
+
+function clearTrialReview() {
+  text(elements.reviewLabel, "No scored cues yet");
+  for (const [element, label] of [[elements.lastVisualResult, "Position"], [elements.lastAudioResult, "Sound"]]) {
+    text(element, `${label}: —`);
+    if (element) element.dataset.outcome = "neutral";
+  }
+}
+
+function isCurrentMatch(channel) {
+  const field = channel === "visual" ? "position" : "letter";
+  const { trials, n_level: level } = state.session;
+  return trials[state.currentIndex][field] === trials[state.currentIndex - level][field];
+}
+
+function reviewCurrentTrial() {
+  if (!state.session || state.currentIndex < state.session.n_level) return;
+  text(elements.reviewLabel, `Cue ${state.currentIndex + 1} result`);
+  for (const [channel, responses, element, label] of [
+    ["visual", state.visualResponses, elements.lastVisualResult, "Position"],
+    ["audio", state.audioResponses, elements.lastAudioResult, "Sound"],
+  ]) {
+    const matches = isCurrentMatch(channel);
+    const marked = responses.has(state.currentIndex);
+    const outcome = marked ? (matches ? "correct" : "incorrect") : (matches ? "missed" : "correct");
+    const verdict = marked ? (matches ? "correct match" : "wrong match") : (matches ? "missed match" : "correct pass");
+    text(element, `${label}: ${verdict}`);
+    if (element) element.dataset.outcome = outcome;
+  }
 }
 
 function clearStimulus() {
@@ -285,6 +331,7 @@ async function startSession() {
   cancelAudio();
   clearStimulus();
   clearMarks();
+  clearTrialReview();
   state.session = null;
   state.currentIndex = -1;
   state.recommendation = null;
@@ -329,6 +376,8 @@ async function startSession() {
 
 function advanceTrial() {
   if (state.status !== "running") return;
+  // A pass or missed match is only known after its response window has closed.
+  reviewCurrentTrial();
   window.clearTimeout(state.flashTimer);
   clearStimulus();
   clearMarks();
@@ -410,9 +459,13 @@ function registerResponse(channel) {
   const button = channel === "visual" ? elements.visualMatch : elements.audioMatch;
   if (responses.has(state.currentIndex)) return;
   responses.add(state.currentIndex);
-  button.classList.add("registered");
+  // The server-generated cues allow immediate feedback; the server still scores the session.
+  const matches = isCurrentMatch(channel);
+  button.classList.add("registered", matches ? "correct" : "incorrect");
   button.setAttribute("aria-pressed", "true");
-  text(channel === "visual" ? elements.visualFeedback : elements.audioFeedback, "Marked");
+  text(channel === "visual" ? elements.visualFeedback : elements.audioFeedback, matches ? "Right" : "Wrong");
+  text(channel === "visual" ? elements.visualResponseDetail : elements.audioResponseDetail,
+    matches ? `Repeated ${channel === "visual" ? "position" : "letter"}` : "Did not repeat");
   if (navigator.vibrate) navigator.vibrate(18);
 }
 
@@ -492,6 +545,7 @@ function resetSession({ keepRecommendation = false } = {}) {
   clearTimers();
   clearStimulus();
   clearMarks();
+  clearTrialReview();
   cancelAudio();
   state.session = null;
   state.currentIndex = -1;
@@ -577,7 +631,7 @@ for (const [button, direction] of [[elements.levelDown, -1], [elements.levelUp, 
   button?.addEventListener("click", () => {
     if (elements.nLevel.disabled) return;
     if (state.status === "finished") resetSession();
-    elements.nLevel.value = String(Math.min(5, Math.max(1, Number(elements.nLevel.value) + direction)));
+    elements.nLevel.value = String(Math.min(maxNLevel, Math.max(1, Number(elements.nLevel.value) + direction)));
     updateSetupCopy();
     savePreferences();
   });
@@ -608,6 +662,7 @@ window.addEventListener("beforeunload", () => { clearTimers(); cancelAudio(); })
 restorePreferences();
 setStatus("idle", "Ready");
 setMatchControls(false);
+clearTrialReview();
 updateSetupCopy();
 checkHealth();
 loadHistory();

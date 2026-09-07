@@ -48,7 +48,7 @@ class NBackAppTests(unittest.TestCase):
 
     def test_invalid_configuration_is_rejected(self):
         for field, value in (
-            ("n_level", 9),
+            ("n_level", 21),
             ("n_level", 2.5),
             ("n_level", True),
             ("n_level", None),
@@ -123,19 +123,66 @@ class NBackAppTests(unittest.TestCase):
         )
 
     def test_short_sessions_at_every_level_have_targets_and_non_targets(self):
-        for n_level in range(1, 6):
+        for n_level in range(1, 21):
             with self.subTest(n_level=n_level):
-                session = self.client.post(
-                    "/api/sessions", json={"n_level": n_level, "rounds": 12}
-                ).json
+                rounds = max(12, n_level + 7)
+                response = self.client.post(
+                    "/api/sessions", json={"n_level": n_level, "rounds": rounds}
+                )
+                self.assertEqual(response.status_code, 200)
+                session = response.json
                 trials = session["trials"]
                 for key in ("position", "letter"):
                     targets = sum(
                         trials[index][key] == trials[index - n_level][key]
-                        for index in range(n_level, 12)
+                        for index in range(n_level, rounds)
                     )
                     self.assertGreaterEqual(targets, 2)
-                    self.assertLess(targets, 12 - n_level)
+                    self.assertLess(targets, rounds - n_level)
+
+    def test_high_levels_can_create_thirty_trial_sessions(self):
+        for n_level in (15, 20):
+            with self.subTest(n_level=n_level):
+                response = self.client.post(
+                    "/api/sessions", json={"n_level": n_level, "rounds": 30}
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json["n_level"], n_level)
+                self.assertEqual(len(response.json["trials"]), 30)
+
+    def test_sessions_require_seven_scored_trials_after_warmup(self):
+        for n_level, rounds in ((15, 20), (20, 20), (20, 26)):
+            with self.subTest(n_level=n_level, rounds=rounds):
+                response = self.client.post(
+                    "/api/sessions", json={"n_level": n_level, "rounds": rounds}
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("rounds", response.json["error"])
+                self.assertIn("warm-up", response.json["error"])
+                self.assertIn(str(n_level + 7), response.json["error"])
+
+    def test_perfect_high_level_sessions_recommend_up_to_twenty(self):
+        for n_level in (19, 20):
+            with self.subTest(n_level=n_level):
+                session = self.client.post(
+                    "/api/sessions", json={"n_level": n_level, "rounds": 30}
+                ).json
+                trials = session["trials"]
+                responses = {
+                    f"{channel}_responses": [
+                        index
+                        for index in range(n_level, len(trials))
+                        if trials[index][key] == trials[index - n_level][key]
+                    ]
+                    for channel, key in (("visual", "position"), ("audio", "letter"))
+                }
+                completed = self.client.post(
+                    f"/api/sessions/{session['session_id']}/complete", json=responses
+                )
+                self.assertEqual(completed.status_code, 200)
+                self.assertEqual(completed.json["accuracy"], 100.0)
+                self.assertEqual(completed.json["hit_rate"], 100.0)
+                self.assertEqual(completed.json["recommendation"]["n_level"], 20)
 
     def test_completion_survives_restart_and_retries_do_not_duplicate_history(self):
         session = self.client.post("/api/sessions", json={}).json

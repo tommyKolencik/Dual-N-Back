@@ -30,11 +30,21 @@ Controls
 - Press A (or the Position button) when the square matches N turns back.
 - Press L (or the Sound button) when the spoken letter matches N turns back.
 - The first N trials are warm-up cues and do not accept responses.
+- Memory distance supports 1-back through 20-back. Shorter session lengths are
+  disabled when they would leave fewer than seven scored trials after warm-up;
+  the app automatically selects the next valid length. At 20-back, choose 30 or
+  40 total trials (20 warm-up cues plus 10 or 20 scored trials).
 - Pause or press Space to freeze the current response window. Resume continues
   the remaining time without replaying the cue. Switching tabs pauses practice.
 - Use Test sound before starting and the volume slider to adjust spoken letters.
 - Reset abandons the current attempt; completed results remain in the session log.
 - Level, length, pace, and volume preferences are saved in this browser.
+- Match buttons show Right or Wrong immediately. The previous-cue row shows each
+  channel's correct match, wrong match, missed match, or correct pass once the
+  response window ends. Warm-up cues are not scored; feedback does not play sound.
+- How to play includes The rules and Simple example tabs. The example walks
+  through three untimed 2-back cues with optional spoken letters and practice
+  buttons. It pauses an active session and never changes the session score.
 
 Session details
 ---------------
@@ -55,3 +65,4 @@ Run tests
 
    python -m unittest discover -s tests
    node --test tests/test_frontend.cjs
+   node --test tests/test_tutorial.cjs

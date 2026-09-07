@@ -9,6 +9,7 @@
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/app.js" defer></script>
+  <script src="/static/tutorial.js" defer></script>
 </head>
 <body>
   <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -23,7 +24,7 @@
     <nav class="main-nav" aria-label="Main navigation">
       <a class="nav-link selected" href="#training" aria-current="page">Practice</a>
       <a class="nav-link" href="#history-title">Session log</a>
-      <button class="nav-link" id="help-button" type="button">How it works <span aria-hidden="true">↗</span></button>
+      <button class="nav-link" id="help-button" type="button">How to play <span aria-hidden="true">↗</span></button>
     </nav>
     <div class="connection-status" id="connection-status"><span class="status-dot" aria-hidden="true"></span><span>Connecting</span></div>
   </header>
@@ -40,7 +41,7 @@
 
     <div class="training-layout">
       <aside class="setup-panel" aria-labelledby="setup-title">
-        <div class="section-label"><h2 id="setup-title">Your session</h2><span>01—05</span></div>
+        <div class="section-label"><h2 id="setup-title">Your session</h2><span>01—20</span></div>
         <div class="level-control">
           <label class="control-label" for="n-level">Memory distance</label>
           <div class="level-stepper">
@@ -48,10 +49,15 @@
             <div class="level-number"><span id="level-display">2</span><span class="level-unit">N-BACK</span></div>
             <button class="step-button" id="level-up" type="button" aria-label="Increase N-back level">+</button>
           </div>
-          <select class="sr-only" id="n-level" aria-label="N-back level"><option value="1">1-back</option><option value="2" selected>2-back</option><option value="3">3-back</option><option value="4">4-back</option><option value="5">5-back</option></select>
+          <select class="sr-only" id="n-level" aria-label="N-back level">
+            <option value="1">1-back</option><option value="2" selected>2-back</option><option value="3">3-back</option><option value="4">4-back</option><option value="5">5-back</option>
+            <option value="6">6-back</option><option value="7">7-back</option><option value="8">8-back</option><option value="9">9-back</option><option value="10">10-back</option>
+            <option value="11">11-back</option><option value="12">12-back</option><option value="13">13-back</option><option value="14">14-back</option><option value="15">15-back</option>
+            <option value="16">16-back</option><option value="17">17-back</option><option value="18">18-back</option><option value="19">19-back</option><option value="20">20-back</option>
+          </select>
           <p class="field-help" id="level-help">Compare each cue with the one from two turns earlier.</p>
         </div>
-        <div class="field-group"><label for="rounds">Session length</label><select id="rounds"><option value="12">12 trials · Short</option><option value="20" selected>20 trials · Standard</option><option value="30">30 trials · Extended</option><option value="40">40 trials · Long</option></select></div>
+        <div class="field-group"><label for="rounds">Session length</label><select id="rounds" aria-describedby="round-details"><option value="12">12 trials · Short</option><option value="20" selected>20 trials · Standard</option><option value="30">30 trials · Extended</option><option value="40">40 trials · Long</option></select><p class="round-details" id="round-details">2 warm-up + 18 scored trials</p></div>
         <div class="field-group"><label for="pace">Time per cue</label><select id="pace"><option value="3000">3.0 seconds · Steady</option><option value="2500" selected>2.5 seconds · Balanced</option><option value="1900">1.9 seconds · Quick</option></select></div>
         <div class="duration-row"><span>Estimated duration</span><span id="time-estimate">~53 sec</span></div>
         <button class="primary-button" id="start-button" type="button"><span>Start session</span><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button>
@@ -82,9 +88,11 @@
           <div class="progress-track" aria-hidden="true"><span id="progress-bar"></span></div>
         </div>
         <div class="response-area"><div class="response-buttons">
-          <button class="match-button visual-match" id="visual-match" type="button" aria-pressed="false" disabled><svg class="icon" aria-hidden="true"><use href="#icon-position"/></svg><span><strong>Position match</strong><small>Same square, N steps ago</small></span><span class="match-key" id="visual-feedback">A</span></button>
-          <button class="match-button audio-match" id="audio-match" type="button" aria-pressed="false" disabled><svg class="icon" aria-hidden="true"><use href="#icon-sound"/></svg><span><strong>Sound match</strong><small>Same letter, N steps ago</small></span><span class="match-key" id="audio-feedback">L</span></button>
-        </div><p id="response-prompt">Press A for position, L for sound. Both can match.</p></div>
+          <button class="match-button visual-match" id="visual-match" type="button" aria-pressed="false" disabled><svg class="icon" aria-hidden="true"><use href="#icon-position"/></svg><span><strong>Position match</strong><small id="visual-response-detail">Same square, N steps ago</small></span><span class="match-key" id="visual-feedback">A</span></button>
+          <button class="match-button audio-match" id="audio-match" type="button" aria-pressed="false" disabled><svg class="icon" aria-hidden="true"><use href="#icon-sound"/></svg><span><strong>Sound match</strong><small id="audio-response-detail">Same letter, N steps ago</small></span><span class="match-key" id="audio-feedback">L</span></button>
+        </div><p id="response-prompt">Press A for position, L for sound. Both can match.</p>
+          <div class="trial-review" aria-label="Previous cue results"><span id="review-label">No scored cues yet</span><div><span id="last-visual-result" data-outcome="neutral">Position: —</span><span id="last-audio-result" data-outcome="neutral">Sound: —</span></div></div>
+        </div>
       </section>
 
       <aside class="field-notes" aria-labelledby="notes-title">
@@ -113,7 +121,35 @@
   </main>
 
   <dialog class="results-dialog" id="results-dialog" aria-labelledby="results-title"><div class="results-topline"><p class="eyebrow">Session report / Finished</p><button class="icon-button" id="close-results" type="button" aria-label="Close results">×</button></div><h2 id="results-title">That's a rep.</h2><p class="result-message" id="result-message"></p><div class="result-score"><strong id="result-accuracy">0%</strong><span>Decision accuracy</span></div><div class="result-grid"><div><span>Position hits</span><strong id="visual-result">0 / 0</strong></div><div><span>Sound hits</span><strong id="audio-result">0 / 0</strong></div><div><span>False alarms</span><strong id="false-result">0</strong></div></div><p class="score-note">Hits are the repeats you caught. False alarms are matches marked when the cue did not repeat. Warm-up cues are excluded.</p><button class="primary-button" id="recommended-button" type="button">Train again</button></dialog>
-  <dialog class="help-dialog" id="help-dialog" aria-labelledby="help-title"><div class="results-topline"><p class="eyebrow">The practice / A quick guide</p><button class="icon-button" id="close-help" type="button" aria-label="Close instructions">×</button></div><h2 id="help-title">What does “N” mean?</h2><p>N is how many cues back you compare. At <strong>2-back</strong>, compare cue 3 with cue 1, cue 4 with cue 2, and so on.</p><ol><li><strong>Watch the square.</strong> Press <kbd>A</kbd> when its position matches N cues ago.</li><li><strong>Listen to the letter.</strong> Press <kbd>L</kbd> when the letter matches N cues ago.</li><li><strong>Decide separately.</strong> Press both if both match, or neither if neither matches.</li></ol><p>The first N cues build your memory; no responses are needed. You can mark a match until the next cue arrives.</p><p>Start with 1-back if you're learning. Use <strong>Pause</strong> for a break; Reset abandons the current attempt without saving a score.</p><p class="score-note">Test your sound before starting. Session history is stored on this server.</p></dialog>
+  <dialog class="help-dialog" id="help-dialog" aria-labelledby="help-title">
+    <div class="results-topline"><p class="eyebrow">The practice / A quick guide</p><button class="icon-button" id="close-help" type="button" aria-label="Close instructions">×</button></div>
+    <h2 id="help-title">How to play.</h2>
+    <div class="help-tabs" role="tablist" aria-label="Learning guide">
+      <button id="rules-tab" type="button" role="tab" aria-selected="true" aria-controls="rules-panel" tabindex="0">The rules</button>
+      <button id="example-tab" type="button" role="tab" aria-selected="false" aria-controls="example-panel" tabindex="-1">Simple example <span aria-hidden="true">↗</span></button>
+    </div>
+    <section id="rules-panel" class="help-panel" role="tabpanel" aria-labelledby="rules-tab" tabindex="0">
+      <h3>What does “N” mean?</h3>
+      <p>N is how many cues back you compare. At <strong>2-back</strong>, compare cue 3 with cue 1, cue 4 with cue 2, and so on.</p>
+      <ol><li><strong>Watch the square.</strong> Press <kbd>A</kbd> when its position matches N cues ago.</li><li><strong>Listen to the letter.</strong> Press <kbd>L</kbd> when the letter matches N cues ago.</li><li><strong>Decide separately.</strong> Press both if both match, or neither if neither matches.</li></ol>
+      <p>The first N cues build your memory; no responses are needed. You can mark a match until the next cue arrives.</p>
+      <div class="feedback-guide"><strong>Feedback as you go</strong><p><span class="feedback-correct">Right</span> means you caught a repeat. <span class="feedback-incorrect">Wrong</span> means you pressed when it didn't repeat. After each cue, you'll also see any missed matches and correct passes (no press needed).</p></div>
+      <p>Start with 1-back if you're learning. Pause takes a break; Reset abandons the attempt without saving a score.</p>
+      <button class="tutorial-link" id="show-example" type="button">Walk through a simple example <span aria-hidden="true">→</span></button>
+    </section>
+    <section id="example-panel" class="help-panel" role="tabpanel" aria-labelledby="example-tab" tabindex="0" hidden>
+      <div class="demo-heading"><h3>2-back, in three cues.</h3><span id="demo-step-count">1 / 3</span></div>
+      <p class="demo-intro">Here, N = 2. Look back two cues. Move at your own pace.</p>
+      <div class="demo-sequence" id="demo-sequence" aria-label="Example cue sequence"></div>
+      <div class="demo-comparison" id="demo-comparison" hidden><span>Compare cue 1</span><span aria-hidden="true">← 2 cues back →</span><span>with cue 3</span></div>
+      <p class="demo-explanation" id="demo-explanation" aria-live="polite">Remember the top-left square and the letter C. No answer yet.</p>
+      <button class="demo-listen" id="demo-listen" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-sound"/></svg>Hear this letter</button>
+      <div class="demo-answers" id="demo-answers" hidden><p>Both repeat. Try pressing A and L, or tap both buttons.</p><div><button id="demo-visual" type="button" aria-pressed="false"><kbd>A</kbd> Position match</button><button id="demo-audio" type="button" aria-pressed="false"><kbd>L</kbd> Sound match</button></div></div>
+      <p id="demo-feedback" class="demo-feedback" aria-live="polite"></p>
+      <div class="demo-actions"><button id="demo-back" class="secondary-button" type="button" disabled>Previous cue</button><button id="demo-next" class="primary-button" type="button">Next cue <span aria-hidden="true">→</span></button></div>
+      <p class="demo-footnote">Example only · Letters are visible to help you learn. In a real session, you hear them. Nothing here changes your score.</p>
+    </section>
+  </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
