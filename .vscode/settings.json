@@ -1,0 +1,11 @@
+{
+  "python.defaultInterpreterPath": "/usr/local/bin/python3",
+  "python.terminal.activateEnvironment": false,
+  "python.analysis.autoSearchPaths": true,
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}"
+  ],
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingImports": "none"
+  }
+}
