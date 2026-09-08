@@ -39,12 +39,25 @@ Controls
 - Use Test sound before starting and the volume slider to adjust spoken letters.
 - Reset abandons the current attempt; completed results remain in the session log.
 - Level, length, pace, and volume preferences are saved in this browser.
+- Appearance in the header lets you choose light or dark mode and a preset or
+  custom accent color (color picker or hex value). Changes are saved separately
+  from training preferences. Text and cues adjust for contrast; right/wrong
+  feedback retains its green/red meaning. Opening Appearance pauses practice.
 - Match buttons show Right or Wrong immediately. The previous-cue row shows each
   channel's correct match, wrong match, missed match, or correct pass once the
   response window ends. Warm-up cues are not scored; feedback does not play sound.
 - How to play includes The rules and Simple example tabs. The example walks
   through three untimed 2-back cues with optional spoken letters and practice
   buttons. It pauses an active session and never changes the session score.
+- Game size adjusts the board from 80% to 150%. Expand hides the side controls;
+  Full screen uses browser full screen when supported and falls back to Expand
+  otherwise. Start, pause/resume, and reset also live inside the game panel.
+  Changing the view pauses an active game; resume explicitly when ready.
+- Tips & Notes is collapsible. Motivation is ready for the author's explanation
+  and chosen academic article links; its content is currently marked coming soon.
+- The footer's Github and email controls share the selected accent color. Email
+  copies thomas.w.kolencik@gmail.com without opening a mail app; if clipboard
+  access is unavailable, a selected text field allows manual copying.
 
 Session details
 ---------------
@@ -66,3 +79,5 @@ Run tests
    python -m unittest discover -s tests
    node --test tests/test_frontend.cjs
    node --test tests/test_tutorial.cjs
+   node --test tests/test_appearance.cjs
+   node --test tests/test_workspace.cjs

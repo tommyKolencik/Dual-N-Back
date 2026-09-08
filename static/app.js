@@ -4,6 +4,7 @@ const elements = Object.fromEntries([
   ["levelHelp", "level-help"], ["levelDown", "level-down"], ["levelUp", "level-up"],
   ["levelDisplay", "level-display"], ["timeEstimate", "time-estimate"],
   ["startButton", "start-button"], ["pauseButton", "pause-button"],
+  ["gameStart", "game-start"], ["gamePause", "game-pause"], ["gameReset", "game-reset"],
   ["audioTest", "audio-test"], ["volume", "volume"], ["currentLevel", "current-level"],
   ["trialCurrent", "trial-current"], ["trialTotal", "trial-total"],
   ["progressBar", "progress-bar"], ["trialRail", "trial-rail"],
@@ -46,6 +47,7 @@ function text(element, value) {
 
 function startLabel(value) {
   text(elements.startButton.firstElementChild || elements.startButton, value);
+  text(elements.gameStart, value);
 }
 
 function setStatus(status, label = status) {
@@ -57,6 +59,11 @@ function setStatus(status, label = status) {
     elements.pauseButton.disabled = !["running", "countdown", "paused"].includes(status);
     text(elements.pauseButton, status === "paused" ? "Resume" : "Pause");
     elements.pauseButton.setAttribute("aria-label", status === "paused" ? "Resume session" : "Pause session");
+  }
+  if (elements.gamePause) {
+    elements.gamePause.disabled = !["running", "countdown", "paused"].includes(status);
+    text(elements.gamePause, status === "paused" ? "Resume" : "Pause");
+    elements.gamePause.setAttribute("aria-label", status === "paused" ? "Resume game" : "Pause game");
   }
 }
 
@@ -157,7 +164,7 @@ function stageCopy(number, title, detail) {
 }
 
 function setControlsLocked(locked) {
-  for (const control of [elements.nLevel, elements.rounds, elements.pace, elements.startButton, elements.audioTest]) {
+  for (const control of [elements.nLevel, elements.rounds, elements.pace, elements.startButton, elements.gameStart, elements.audioTest]) {
     if (control) control.disabled = locked;
   }
   if (elements.levelDown) elements.levelDown.disabled = locked || Number(elements.nLevel.value) <= 1;
@@ -512,6 +519,10 @@ async function finishSession() {
 
 function openDialog(dialog) {
   if (!dialog || dialog.open) return;
+  if (document.fullscreenElement && document.exitFullscreen) {
+    document.exitFullscreen().then(() => openDialog(dialog)).catch(() => dialog.showModal());
+    return;
+  }
   if (typeof dialog.showModal === "function") dialog.showModal();
   else dialog.setAttribute("open", "");
 }
@@ -610,6 +621,9 @@ async function loadHistory(runToken = state.runToken) {
 }
 
 elements.startButton.addEventListener("click", startSession);
+elements.gameStart?.addEventListener("click", startSession);
+elements.gamePause?.addEventListener("click", togglePause);
+elements.gameReset?.addEventListener("click", () => resetSession());
 elements.resetButton.addEventListener("click", () => resetSession());
 elements.visualMatch.addEventListener("click", () => registerResponse("visual"));
 elements.audioMatch.addEventListener("click", () => registerResponse("audio"));
@@ -617,6 +631,12 @@ elements.pauseButton?.addEventListener("click", togglePause);
 elements.audioTest?.addEventListener("click", () => speakLetter("Audio check. C.", true));
 elements.closeResults.addEventListener("click", () => closeDialog(elements.dialog));
 elements.helpButton?.addEventListener("click", () => { pauseSession(); openDialog(elements.helpDialog); });
+document.getElementById("appearance-button")?.addEventListener("click", () => pauseSession());
+for (const id of ["motivation-button", "expand-game", "fullscreen-game"]) {
+  document.getElementById(id)?.addEventListener("click", () => pauseSession());
+}
+document.getElementById("game-size")?.addEventListener("input", () => pauseSession());
+document.addEventListener("fullscreenchange", () => pauseSession());
 elements.closeHelp?.addEventListener("click", () => closeDialog(elements.helpDialog));
 elements.recommendedButton.addEventListener("click", () => {
   const recommendedLevel = state.recommendation?.n_level || Number(elements.nLevel.value);

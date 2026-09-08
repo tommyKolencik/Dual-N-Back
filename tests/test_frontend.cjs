@@ -216,6 +216,29 @@ test("pause freezes responses and resumes the same remaining window without repl
   assert.equal(h.get("last-audio-result").textContent, "Sound: missed match");
 });
 
+test("opening appearance pauses practice and its input cannot mark matches", async () => {
+  const h = harness();
+  await start(h);
+  h.advance(3300);
+  h.get("appearance-button").emit("click");
+  assert.equal(h.state.status, "paused");
+  assert.equal(h.state.remaining, 1200);
+  const index = h.state.currentIndex;
+  const requestCount = h.requests.length;
+  h.window.emit("keydown", { key: "a", target: { closest: () => h.get("appearance-dialog") } });
+  h.window.emit("keydown", { key: "l", target: { closest: () => h.get("accent-hex") } });
+  h.advance(90000);
+  assert.equal(h.state.currentIndex, index);
+  assert.equal(h.state.visualResponses.size, 0);
+  assert.equal(h.state.audioResponses.size, 0);
+  assert.equal(h.requests.length, requestCount);
+  h.run("resumeSession()");
+  h.advance(1199);
+  assert.equal(h.state.currentIndex, index);
+  h.advance(1);
+  assert.equal(h.state.currentIndex, index + 1);
+});
+
 test("a real N-back match gets immediate feedback only on the pressed channel", async () => {
   const h = harness();
   await start(h);
@@ -237,6 +260,41 @@ test("a real N-back match gets immediate feedback only on the pressed channel", 
   assert.equal(h.get("audio-feedback").textContent, "Right");
   assert.equal(h.get("audio-response-detail").textContent, "Repeated letter");
   assert.equal(h.spoken.length, played); // Verdicts never speak over the stimulus.
+});
+
+test("in-game start, pause, and reset mirror session controls for expanded view", async () => {
+  const h = harness();
+  h.get("game-start").emit("click");
+  assert.equal(h.state.status, "loading");
+  assert.equal(h.get("game-start").disabled, true);
+  h.requests[0].resolve(response(session()));
+  await flush();
+  h.advance(2100);
+  assert.equal(h.get("game-pause").disabled, false);
+  h.get("game-pause").emit("click");
+  assert.equal(h.state.status, "paused");
+  assert.equal(h.get("game-pause").textContent, "Resume");
+  assert.equal(h.get("pause-button").textContent, "Resume");
+  h.get("game-pause").emit("click");
+  assert.equal(h.state.status, "running");
+  h.get("game-reset").emit("click");
+  assert.equal(h.state.status, "idle");
+  assert.equal(h.get("game-start").disabled, false);
+  assert.equal(h.get("game-start").textContent, "Start session");
+  assert.equal(h.get("game-pause").disabled, true);
+});
+
+test("view changes and Motivation pause active trials without losing progress", async () => {
+  for (const [id, event] of [["expand-game", "click"], ["fullscreen-game", "click"], ["game-size", "input"], ["motivation-button", "click"]]) {
+    const h = harness();
+    await start(h);
+    h.advance(3300);
+    h.get(id).emit(event);
+    assert.equal(h.state.status, "paused", id);
+    assert.equal(h.state.remaining, 1200);
+    h.advance(90000);
+    assert.equal(h.state.currentIndex, 2);
+  }
 });
 
 test("a wrong position mark and right sound mark receive independent verdicts", async () => {

@@ -7,9 +7,11 @@
   <meta name="description" content="RECALL: a dual N-back practice space. Track position and sound, compare cues, and review your session.">
   <title>RECALL — Dual N-back</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <script src="/static/appearance.js"></script>
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/app.js" defer></script>
   <script src="/static/tutorial.js" defer></script>
+  <script src="/static/workspace.js" defer></script>
 </head>
 <body>
   <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -20,18 +22,21 @@
   </svg>
 
   <header class="site-header">
-    <a class="brand" href="/" aria-label="RECALL home"><span class="brand-mark" aria-hidden="true"><i></i><i></i></span>RECALL</a>
     <nav class="main-nav" aria-label="Main navigation">
       <a class="nav-link selected" href="#training" aria-current="page">Practice</a>
       <a class="nav-link" href="#history-title">Session log</a>
+      <button class="nav-link" id="motivation-button" type="button" aria-haspopup="dialog" aria-controls="motivation-dialog">Motivation</button>
       <button class="nav-link" id="help-button" type="button">How to play <span aria-hidden="true">↗</span></button>
     </nav>
-    <div class="connection-status" id="connection-status"><span class="status-dot" aria-hidden="true"></span><span>Connecting</span></div>
+    <div class="header-tools">
+      <div class="connection-status" id="connection-status"><span class="status-dot" aria-hidden="true"></span><span>Connecting</span></div>
+      <button class="appearance-button" id="appearance-button" type="button" aria-label="Appearance" aria-haspopup="dialog" aria-controls="appearance-dialog" aria-expanded="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M12 7h5m-5 5h8m-8 5h5"/></svg><span>Appearance</span></button>
+    </div>
   </header>
 
   <main class="app-shell" id="training">
     <section class="page-heading" aria-labelledby="page-title">
-      <div><p class="eyebrow">Attention, in practice / 01</p><h1 id="page-title">Dual N-back<span class="title-dot">.</span></h1><p class="page-subtitle">A place to work on holding more in mind.</p></div>
+      <div><h1 id="page-title">Dual N-back<span class="title-dot">.</span></h1><p class="page-subtitle">A game to improve memory.</p></div>
       <dl class="session-stats" aria-label="Recent session statistics">
         <div><dt>Logged sessions*</dt><dd id="session-count">—</dd></div>
         <div><dt>Recent best*</dt><dd id="best-score">—</dd></div>
@@ -65,12 +70,17 @@
         <div class="audio-settings">
           <div class="audio-settings-heading"><label for="volume"><svg class="icon" aria-hidden="true"><use href="#icon-sound"/></svg>Audio level</label><button id="audio-test" class="text-button" type="button">Test sound ↗</button></div>
           <input id="volume" type="range" min="0" max="100" value="80" aria-label="Spoken letter volume">
-          <p>Headphones on. Distractions off.</p>
+          <p>I recommend using headphones. You can play without audio also.</p>
         </div>
       </aside>
 
-      <section class="game-panel" aria-labelledby="game-title">
+      <section class="game-panel" id="game-panel" aria-labelledby="game-title">
         <div class="game-toolbar"><div><span class="channel-dot" aria-hidden="true"></span><h2 id="game-title"><span id="current-level">2</span>-back / Dual stream</h2></div><span class="session-status" id="session-status" data-state="idle">Ready</span></div>
+        <div class="game-view-controls">
+          <label for="game-size">Game size <input id="game-size" type="range" min="80" max="150" step="5" value="100"><output id="game-size-value" for="game-size">100%</output></label>
+          <div><button id="expand-game" type="button" aria-pressed="false">Expand</button><button id="fullscreen-game" type="button" aria-pressed="false">Full screen</button></div>
+        </div>
+        <p class="game-view-message" id="game-view-message" role="status" hidden></p>
         <div class="stage-wrap">
           <div class="field-caption"><span>01 / Spatial field</span><span id="time-remaining" aria-label="Time remaining">00:50</span></div>
           <div class="board-surround">
@@ -87,17 +97,21 @@
           <div class="trial-progress"><span>Trial <b id="trial-current">0</b><span class="counter-divider"> / </span><span id="trial-total">20</span></span><div class="trial-rail" id="trial-rail" aria-hidden="true"></div></div>
           <div class="progress-track" aria-hidden="true"><span id="progress-bar"></span></div>
         </div>
-        <div class="response-area"><div class="response-buttons">
+        <div class="response-area">
+          <div class="game-key-guide" aria-label="How to respond"><span><kbd>A</kbd> — Position match</span><span><kbd>L</kbd> — Sound match</span><p>Both match? Press both. Neither? Wait.</p></div>
+          <div class="response-buttons">
           <button class="match-button visual-match" id="visual-match" type="button" aria-pressed="false" disabled><svg class="icon" aria-hidden="true"><use href="#icon-position"/></svg><span><strong>Position match</strong><small id="visual-response-detail">Same square, N steps ago</small></span><span class="match-key" id="visual-feedback">A</span></button>
           <button class="match-button audio-match" id="audio-match" type="button" aria-pressed="false" disabled><svg class="icon" aria-hidden="true"><use href="#icon-sound"/></svg><span><strong>Sound match</strong><small id="audio-response-detail">Same letter, N steps ago</small></span><span class="match-key" id="audio-feedback">L</span></button>
         </div><p id="response-prompt">Press A for position, L for sound. Both can match.</p>
           <div class="trial-review" aria-label="Previous cue results"><span id="review-label">No scored cues yet</span><div><span id="last-visual-result" data-outcome="neutral">Position: —</span><span id="last-audio-result" data-outcome="neutral">Sound: —</span></div></div>
+          <div class="game-session-actions"><button id="game-start" class="primary-button" type="button">Start session</button><button id="game-pause" class="secondary-button" type="button" aria-label="Pause game" disabled>Pause</button><button id="game-reset" class="secondary-button" type="button">Reset game</button></div>
         </div>
       </section>
 
-      <aside class="field-notes" aria-labelledby="notes-title">
-        <div class="section-label"><h2 id="notes-title">Field notes</h2><span>↘</span></div>
-        <h3>Remember.<br>Compare.<br>Let it go.</h3>
+      <details class="field-notes" aria-labelledby="notes-title">
+        <summary class="section-label"><h2 id="notes-title">Tips & Notes</h2><span aria-hidden="true">+</span></summary>
+        <div class="notes-content">
+        <h3> Start with a smaller N then work your way up!</h3>
         <p>The cues keep moving. Your job is to notice what repeats at the right distance.</p>
         <div class="example-header"><span>A 2-back example</span><span>↓</span></div>
         <div class="example-sequence" aria-label="Example: position and letter C at cue one repeat at cue three, two steps later.">
@@ -107,9 +121,10 @@
         </div>
         <div class="example-bracket"><span>2 steps back</span></div>
         <p class="example-explanation">Cue 3 repeats cue 1.<br>Here, press <kbd>A</kbd> <em>and</em> <kbd>L</kbd>.</p>
-        <div class="note-rule"><span>01</span><p>Only one matches?<br>Press only its key.</p></div><div class="note-rule"><span>02</span><p>Neither matches?<br>Let the next cue arrive.</p></div>
+        <div class="note-rule"><span>01</span><p>If only one of the two conditions are satisfied, press the respective button for that conditition.</p></div><div class="note-rule"><span>02</span><p>If neither match, do nothing.</p></div>
         <div class="practice-note"><span class="tiny-cross" aria-hidden="true">+</span><p>A steady rhythm matters more than a higher number.</p></div>
-      </aside>
+        </div>
+      </details>
     </div>
 
     <section class="history-panel" aria-labelledby="history-title">
@@ -117,7 +132,7 @@
       <div class="history-list" id="history-list"><div class="empty-history"><span class="empty-index" aria-hidden="true">— / —</span><div><strong>No sessions on the board. Yet.</strong><p>Finish a session to see your accuracy and matches here.</p></div><span class="empty-label">READY FOR YOUR FIRST REP</span></div></div>
       <div class="history-footnote"><span>* Summary shows up to your six most recent sessions.</span><span>Accuracy = correct match + non-match decisions.</span></div>
     </section>
-    <footer class="site-footer"><span>RECALL / A practice in attention.</span><span>One cue at a time.</span></footer>
+    <footer class="site-footer"><span>Made by Tommy Kolencik with HTML and Python.</span><span>If you have suggestions, here is my <a class="contact-link" href="https://github.com/tommyKolencik">Github</a> &amp; <button class="contact-link" id="copy-email" type="button" aria-label="Copy email address thomas.w.kolencik@gmail.com">thomas.w.kolencik@gmail.com</button>.</span><span class="contact-feedback" id="contact-feedback" role="status"></span><input class="email-copy-fallback" id="email-copy-fallback" type="text" value="thomas.w.kolencik@gmail.com" readonly aria-label="Email address to copy manually" hidden></footer>
   </main>
 
   <dialog class="results-dialog" id="results-dialog" aria-labelledby="results-title"><div class="results-topline"><p class="eyebrow">Session report / Finished</p><button class="icon-button" id="close-results" type="button" aria-label="Close results">×</button></div><h2 id="results-title">That's a rep.</h2><p class="result-message" id="result-message"></p><div class="result-score"><strong id="result-accuracy">0%</strong><span>Decision accuracy</span></div><div class="result-grid"><div><span>Position hits</span><strong id="visual-result">0 / 0</strong></div><div><span>Sound hits</span><strong id="audio-result">0 / 0</strong></div><div><span>False alarms</span><strong id="false-result">0</strong></div></div><p class="score-note">Hits are the repeats you caught. False alarms are matches marked when the cue did not repeat. Warm-up cues are excluded.</p><button class="primary-button" id="recommended-button" type="button">Train again</button></dialog>
@@ -149,6 +164,40 @@
       <div class="demo-actions"><button id="demo-back" class="secondary-button" type="button" disabled>Previous cue</button><button id="demo-next" class="primary-button" type="button">Next cue <span aria-hidden="true">→</span></button></div>
       <p class="demo-footnote">Example only · Letters are visible to help you learn. In a real session, you hear them. Nothing here changes your score.</p>
     </section>
+  </dialog>
+  <dialog class="appearance-dialog" id="appearance-dialog" aria-labelledby="appearance-title">
+    <div class="results-topline"><p class="eyebrow">Customize</p><button class="icon-button" id="close-appearance" type="button" aria-label="Close appearance">×</button></div>
+    <h2 id="appearance-title">Set Your Desired UI.</h2>
+    <fieldset class="appearance-fieldset">
+      <legend>Color mode</legend>
+      <div class="theme-options">
+        <label class="theme-option"><input id="theme-light" type="radio" name="color-mode" value="light" checked><span class="theme-card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg><strong>Light</strong><small>Warm &amp; airy</small></span></label>
+        <label class="theme-option"><input id="theme-dark" type="radio" name="color-mode" value="dark"><span class="theme-card"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z"/></svg><strong>Dark</strong><small>Quiet &amp; focused</small></span></label>
+      </div>
+    </fieldset>
+    <fieldset class="appearance-fieldset">
+      <legend>Accent color</legend>
+      <p class="appearance-help">Pick a favorite, or mix your own. Right / Wrong feedback stays green / red.</p>
+      <div class="accent-swatches" role="group" aria-label="Accent color presets">
+        <button class="accent-swatch" type="button" data-color="#ef754d" style="--swatch: #ef754d" aria-label="Orange accent" aria-pressed="true"></button>
+        <button class="accent-swatch" type="button" data-color="#5bbfa4" style="--swatch: #5bbfa4" aria-label="Mint accent" aria-pressed="false"></button>
+        <button class="accent-swatch" type="button" data-color="#6699ee" style="--swatch: #6699ee" aria-label="Blue accent" aria-pressed="false"></button>
+        <button class="accent-swatch" type="button" data-color="#ac8be8" style="--swatch: #ac8be8" aria-label="Violet accent" aria-pressed="false"></button>
+        <button class="accent-swatch" type="button" data-color="#df7ba0" style="--swatch: #df7ba0" aria-label="Rose accent" aria-pressed="false"></button>
+      </div>
+      <div class="custom-accent-row">
+        <label class="color-picker-label" for="accent-color"><span>Custom color</span><input id="accent-color" type="color" value="#ef754d"></label>
+        <label class="hex-color-label" for="accent-hex"><span>Hex value</span><input id="accent-hex" type="text" value="#EF754D" maxlength="7" spellcheck="false" autocapitalize="characters" autocomplete="off" aria-describedby="appearance-message"></label>
+      </div>
+      <p class="appearance-message" id="appearance-message" role="status">Text and cues adjust for contrast.</p>
+    </fieldset>
+    <div class="appearance-footer"><button class="text-button" id="reset-appearance" type="button">Reset appearance</button><span id="appearance-persistence">Saved on this device</span></div>
+  </dialog>
+  <dialog class="motivation-dialog" id="motivation-dialog" aria-labelledby="motivation-title">
+    <div class="results-topline"><p class="eyebrow">Behind the project</p><button class="icon-button" id="close-motivation" type="button" aria-label="Close motivation">×</button></div>
+    <h2 id="motivation-title">Motivation</h2>
+    <section class="motivation-section" id="motivation-story"><h3>Why I made this</h3><p class="coming-soon">Coming soon.</p></section>
+    <section class="motivation-section" id="motivation-reading"><h3>Reading &amp; research</h3><p class="coming-soon">Article links will be added here.</p></section>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
