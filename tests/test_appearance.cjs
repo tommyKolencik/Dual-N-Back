@@ -150,6 +150,8 @@ test("saved appearance is applied before CSS and before querying body controls",
   assert.doesNotMatch(script, /\s(?:defer|async)(?:\s|>)/);
   assert.equal(h.document.documentElement.dataset.theme, "dark");
   assert.equal(h.style("--accent"), "#6478e5");
+  assert.equal(h.style("--accent-complement"), "#e5d164");
+  assert.ok(contrast(h.style("--accent-complement-ink"), "#242a28") >= 4.5);
   assert.deepEqual(h.beforeDomQueries, []);
   assert.equal(h.writes.length, 0, "Restoration should not overwrite saved preferences");
   h.initialize();
@@ -166,9 +168,13 @@ test("theme radios update the palette and persist light/dark preferences", () =>
   assert.equal(h.style("--accent"), "#ef754d");
   h.initialize();
   const lightInk = h.style("--accent-ink");
+  const lightComplementInk = h.style("--accent-complement-ink");
+  const complement = h.style("--accent-complement");
   h.selectTheme("dark");
   assert.equal(h.document.documentElement.dataset.theme, "dark");
   assert.notEqual(h.style("--accent-ink"), lightInk);
+  assert.equal(h.style("--accent-complement"), complement, "Changing theme preserves the complementary hue");
+  assert.notEqual(h.style("--accent-complement-ink"), lightComplementInk);
   assert.deepEqual(h.saved(), { theme: "dark", accent: "#ef754d" });
   h.selectTheme("light");
   assert.equal(h.document.documentElement.dataset.theme, "light");
@@ -180,9 +186,11 @@ test("native picker and normalized three/six digit hex values update custom acce
   h.initialize();
   h.input("accent-color", "#5b67e8");
   assert.equal(h.style("--accent"), "#5b67e8");
+  assert.equal(h.style("--accent-complement"), "#e8dc5b");
   assert.equal(h.get("accent-hex").value.toLowerCase(), "#5b67e8");
   h.input("accent-hex", "AbC", "change");
   assert.equal(h.style("--accent"), "#aabbcc");
+  assert.equal(h.style("--accent-complement"), "#ccbbaa");
   assert.equal(h.get("accent-color").value, "#aabbcc");
   h.input("accent-hex", "#12ABef", "change");
   assert.equal(h.style("--accent"), "#12abef");
@@ -202,6 +210,10 @@ test("accent presets expose selection and stay synchronized with custom input", 
     assert.equal(h.swatches.filter((item) => item.attributes["aria-pressed"] === "true").length, 1);
     assert.equal(h.get("accent-color").value, swatch.dataset.color.toLowerCase());
     assert.equal(h.saved().accent, swatch.dataset.color.toLowerCase());
+    const selected = rgb(swatch.dataset.color);
+    const reflected = rgb(h.style("--accent-complement"));
+    const midpoint = Math.min(...selected) + Math.max(...selected);
+    assert.deepEqual(reflected, selected.map((channel) => midpoint - channel));
   }
   h.input("accent-color", "#123456");
   assert.equal(h.swatches.some((item) => item.attributes["aria-pressed"] === "true"), false);
@@ -233,6 +245,7 @@ test("appearance dialog opens/closes and reset changes only appearance preferenc
   h.click("reset-appearance");
   assert.equal(h.document.documentElement.dataset.theme, "light");
   assert.equal(h.style("--accent"), "#ef754d");
+  assert.equal(h.style("--accent-complement"), "#4dc7ef");
   assert.equal(h.get("theme-light").checked, true);
   assert.equal(h.get("accent-color").value, "#ef754d");
   assert.equal(h.entries.get(trainingKey), trainingPreferences);
@@ -262,20 +275,42 @@ test("corrupt storage and blocked reads/writes still leave functional appearance
   }
 });
 
-test("custom colors preserve readable button text, accent text, and spatial cues in both modes", () => {
+test("custom colors preserve readable button text, accent text, complementary titles, and spatial cues in both modes", () => {
   const h = harness();
   h.initialize();
   for (const theme of ["light", "dark"]) {
     h.selectTheme(theme);
     for (const color of ["#ef754d", "#000000", "#ffffff", "#ff0000", "#00ff00", "#0000ff", "#242b29", "#faf9f5"]) {
       h.input("accent-color", color);
-      for (const name of ["--accent", "--accent-ink", "--accent-on", "--accent-hover", "--accent-soft", "--accent-border", "--accent-field", "--accent-glow"]) {
+      for (const name of ["--accent", "--accent-complement", "--accent-complement-ink", "--accent-ink", "--accent-on", "--accent-hover", "--accent-soft", "--accent-border", "--accent-field", "--accent-glow"]) {
         assert.ok(h.style(name), `Missing ${name} for ${theme} ${color}`);
       }
       assert.ok(contrast(h.style("--accent-on"), color) >= 4.5, `Button text contrast: ${theme} ${color}`);
       assert.ok(contrast(h.style("--accent-ink"), theme === "light" ? "#faf9f5" : "#242a28") >= 4.5, `Accent text contrast: ${theme} ${color}`);
+      for (const background of theme === "light" ? ["#f2f0e9", "#faf9f5"] : ["#181d1b", "#242a28"]) {
+        assert.ok(contrast(h.style("--accent-complement-ink"), background) >= 4.5, `Complementary title contrast: ${theme} ${color} on ${background}`);
+      }
       assert.ok(contrast(h.style("--accent-field"), "#242b29") >= 4.5, `Spatial cue contrast: ${theme} ${color}`);
     }
+  }
+});
+
+test("complement rotates orange to blue and blue to orange while retaining neutral colors", () => {
+  const h = harness();
+  h.initialize();
+  for (const [accent, complement] of [
+    ["#ef754d", "#4dc7ef"],
+    ["#ff9900", "#0066ff"],
+    ["#0066ff", "#ff9900"],
+    ["#ff0000", "#00ffff"],
+    ["#777777", "#777777"],
+    ["#000000", "#000000"],
+    ["#ffffff", "#ffffff"],
+  ]) {
+    h.input("accent-color", accent);
+    assert.equal(h.style("--accent-complement"), complement, `Complement of ${accent}`);
+    h.input("accent-color", complement);
+    assert.equal(h.style("--accent-complement"), accent, "Two complementary rotations restore the original color");
   }
 });
 

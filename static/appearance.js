@@ -18,6 +18,14 @@
     return [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16));
   }
 
+  function complementaryColor(color) {
+    const rgb = channels(color);
+    const midpoint = Math.min(...rgb) + Math.max(...rgb);
+    // This is a 180-degree HSL hue rotation, retaining saturation and lightness.
+    // Achromatic colors stay neutral instead of acquiring an arbitrary hue.
+    return `#${rgb.map((channel) => (midpoint - channel).toString(16).padStart(2, "0")).join("")}`;
+  }
+
   function mix(from, to, amount) {
     const target = channels(to);
     return `#${channels(from).map((channel, index) => Math.round(channel + (target[index] - channel) * amount).toString(16).padStart(2, "0")).join("")}`;
@@ -62,6 +70,7 @@
     const paper = dark ? "#181d1b" : "#f2f0e9";
     const surface = dark ? "#242a28" : "#faf9f5";
     const accent = preferences.accent;
+    const complement = complementaryColor(accent);
     const soft = mix(surface, accent, dark ? 0.18 : 0.12);
     const ink = readableColor(accent, [paper, surface, soft]);
     const onAccent = contrast(accent, "#000000") > contrast(accent, "#ffffff") ? "#000000" : "#ffffff";
@@ -70,12 +79,15 @@
     root.style.colorScheme = preferences.theme;
     for (const [name, value] of Object.entries({
       accent,
+      "accent-complement": complement,
+      "accent-complement-ink": readableColor(complement, [paper, surface]),
       "accent-ink": ink,
       "accent-on": onAccent,
       "accent-hover": mix(accent, onAccent === "#000000" ? "#ffffff" : "#000000", 0.10),
       "accent-soft": soft,
       "accent-border": mix(surface, ink, 0.65),
       "accent-field": field,
+      "accent-inverse": readableColor(accent, [dark ? "#edf0e8" : "#242b29"]),
       "accent-glow": `${field}33`,
     })) root.style.setProperty(`--${name}`, value);
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", paper);

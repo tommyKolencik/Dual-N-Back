@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f2f0e9">
   <meta name="description" content="RECALL: a dual N-back practice space. Track position and sound, compare cues, and review your session.">
-  <title>RECALL — Dual N-back</title>
+  <title>Dual N-back</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <script src="/static/appearance.js"></script>
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/app.js" defer></script>
   <script src="/static/tutorial.js" defer></script>
   <script src="/static/workspace.js" defer></script>
+  <script src="/static/typography.js" defer></script>
 </head>
 <body>
   <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -36,7 +37,7 @@
 
   <main class="app-shell" id="training">
     <section class="page-heading" aria-labelledby="page-title">
-      <div><h1 id="page-title">Dual N-back<span class="title-dot">.</span></h1><p class="page-subtitle">A game to improve memory.</p></div>
+      <div><h1 id="page-title">Dual N-back</h1><p class="page-subtitle">A game to improve memory</p></div>
       <dl class="session-stats" aria-label="Recent session statistics">
         <div><dt>Logged sessions*</dt><dd id="session-count">—</dd></div>
         <div><dt>Recent best*</dt><dd id="best-score">—</dd></div>
@@ -98,7 +99,7 @@
           <div class="progress-track" aria-hidden="true"><span id="progress-bar"></span></div>
         </div>
         <div class="response-area">
-          <div class="game-key-guide" aria-label="How to respond"><span><kbd>A</kbd> — Position match</span><span><kbd>L</kbd> — Sound match</span><p>Both match? Press both. Neither? Wait.</p></div>
+          <div class="game-key-guide" aria-label="How to respond"><span><kbd>A</kbd> — Position match</span><span><kbd>L</kbd> — Sound match</span><p>If both match the state of N moves ago, press both A and L. If neither match, do nothing.</p></div>
           <div class="response-buttons">
           <button class="match-button visual-match" id="visual-match" type="button" aria-pressed="false" disabled><svg class="icon" aria-hidden="true"><use href="#icon-position"/></svg><span><strong>Position match</strong><small id="visual-response-detail">Same square, N steps ago</small></span><span class="match-key" id="visual-feedback">A</span></button>
           <button class="match-button audio-match" id="audio-match" type="button" aria-pressed="false" disabled><svg class="icon" aria-hidden="true"><use href="#icon-sound"/></svg><span><strong>Sound match</strong><small id="audio-response-detail">Same letter, N steps ago</small></span><span class="match-key" id="audio-feedback">L</span></button>
@@ -132,7 +133,7 @@
       <div class="history-list" id="history-list"><div class="empty-history"><span class="empty-index" aria-hidden="true">— / —</span><div><strong>No sessions on the board. Yet.</strong><p>Finish a session to see your accuracy and matches here.</p></div><span class="empty-label">READY FOR YOUR FIRST REP</span></div></div>
       <div class="history-footnote"><span>* Summary shows up to your six most recent sessions.</span><span>Accuracy = correct match + non-match decisions.</span></div>
     </section>
-    <footer class="site-footer"><span>Made by Tommy Kolencik with HTML and Python.</span><span>If you have suggestions, here is my <a class="contact-link" href="https://github.com/tommyKolencik">Github</a> &amp; <button class="contact-link" id="copy-email" type="button" aria-label="Copy email address thomas.w.kolencik@gmail.com">thomas.w.kolencik@gmail.com</button>.</span><span class="contact-feedback" id="contact-feedback" role="status"></span><input class="email-copy-fallback" id="email-copy-fallback" type="text" value="thomas.w.kolencik@gmail.com" readonly aria-label="Email address to copy manually" hidden></footer>
+    <footer class="site-footer"><span>Made with <span class="footer-heart" role="img" aria-label="love">♥</span><span class="sentence-period">...</span>and HTML and Python.</span><span>If you have suggestions, here is my <a class="contact-link" href="https://github.com/tommyKolencik">Github</a> &amp; <button class="contact-link" id="copy-email" type="button" aria-label="Copy email address thomas.w.kolencik@gmail.com">thomas.w.kolencik@gmail.com</button>.</span><span class="contact-feedback" id="contact-feedback" role="status"></span><input class="email-copy-fallback" id="email-copy-fallback" type="text" value="thomas.w.kolencik@gmail.com" readonly aria-label="Email address to copy manually" hidden></footer>
   </main>
 
   <dialog class="results-dialog" id="results-dialog" aria-labelledby="results-title"><div class="results-topline"><p class="eyebrow">Session report / Finished</p><button class="icon-button" id="close-results" type="button" aria-label="Close results">×</button></div><h2 id="results-title">That's a rep.</h2><p class="result-message" id="result-message"></p><div class="result-score"><strong id="result-accuracy">0%</strong><span>Decision accuracy</span></div><div class="result-grid"><div><span>Position hits</span><strong id="visual-result">0 / 0</strong></div><div><span>Sound hits</span><strong id="audio-result">0 / 0</strong></div><div><span>False alarms</span><strong id="false-result">0</strong></div></div><p class="score-note">Hits are the repeats you caught. False alarms are matches marked when the cue did not repeat. Warm-up cues are excluded.</p><button class="primary-button" id="recommended-button" type="button">Train again</button></dialog>

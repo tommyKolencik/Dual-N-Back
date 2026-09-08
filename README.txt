@@ -43,6 +43,9 @@ Controls
   custom accent color (color picker or hex value). Changes are saved separately
   from training preferences. Text and cues adjust for contrast; right/wrong
   feedback retains its green/red meaning. Opening Appearance pauses practice.
+- The Dual N-back title uses the complementary hue of the chosen accent, with
+  contrast adjusted for the active theme. Sentence-ending periods and the footer
+  heart use accent colors; wording, email addresses, and decimal values are intact.
 - Match buttons show Right or Wrong immediately. The previous-cue row shows each
   channel's correct match, wrong match, missed match, or correct pass once the
   response window ends. Warm-up cues are not scored; feedback does not play sound.
@@ -81,3 +84,4 @@ Run tests
    node --test tests/test_tutorial.cjs
    node --test tests/test_appearance.cjs
    node --test tests/test_workspace.cjs
+   node --test tests/test_typography.cjs
