@@ -1,0 +1,537 @@
+// Session lifecycle regressions. Run with: node --test tests/test_frontend.cjs
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+const vm = require("node:vm");
+const source = fs.readFileSync(path.join(__dirname, "../static/app.js"), "utf8");
+
+class Element {
+  constructor() {
+    this.className = "";
+    this.textContent = "";
+    this.children = [];
+    this.style = {};
+    this.dataset = {};
+    this.attributes = {};
+    this.handlers = {};
+    this.selectors = {};
+    this.disabled = false;
+    this.open = false;
+    this.options = [];
+    this.classList = {
+      contains: (name) => this.className.split(" ").includes(name),
+      add: (...names) => names.forEach((name) => this.classList.toggle(name, true)),
+      remove: (...names) => names.forEach((name) => this.classList.toggle(name, false)),
+      toggle: (name, value) => {
+        const names = new Set(this.className.split(" ").filter(Boolean));
+        const include = value === undefined ? !names.has(name) : value;
+        if (include) names.add(name); else names.delete(name);
+        this.className = [...names].join(" ");
+      },
+    };
+  }
+  append(child) { this.children.push(child); }
+  replaceChildren(...children) { this.children = children.flatMap((child) => child.fragment ? child.children : [child]); }
+  querySelector(selector) { return this.selectors[selector] ||= new Element(); }
+  setAttribute(name, value) { this.attributes[name] = value; }
+  removeAttribute(name) { delete this.attributes[name]; }
+  addEventListener(event, handler) { (this.handlers[event] ||= []).push(handler); }
+  emit(event, payload = {}) { for (const handler of this.handlers[event] || []) handler(payload); }
+  showModal() { this.open = true; }
+  close() { this.open = false; }
+  get firstElementChild() { return this.children[0]; }
+  get lastElementChild() { return this.children.at(-1); }
+}
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+function response(payload) { return { ok: true, json: async () => payload }; }
+function session(id = "session-one") {
+  return {
+    session_id: id, n_level: 2, rounds: 5, interval_ms: 1500,
+    trials: [0, 1, 0, 2, 0].map((position, index) => ({ position, letter: index % 2 ? "R" : "C" })),
+  };
+}
+function result() {
+  return { accuracy: 85, visual: { hits: 2, targets: 2 }, audio: { hits: 2, targets: 3 }, false_alarms: 0, recommendation: { n_level: 3, message: "Next level" } };
+}
+
+function harness({ audio = true, storage = null } = {}) {
+  const nodes = new Map();
+  const get = (id) => {
+    if (!nodes.has(id)) nodes.set(id, new Element());
+    return nodes.get(id);
+  };
+  for (const [id, value, options] of [["n-level", "2", Array.from({ length: 20 }, (_, index) => index + 1)], ["rounds", "20", [12, 20, 30, 40]], ["pace", "2500", [3000, 2500, 1900]]]) {
+    get(id).value = value;
+    get(id).options = options.map((option) => ({ value: String(option) }));
+  }
+  get("volume").value = "80";
+  get("start-button").append(new Element());
+  get("connection-status").append(new Element());
+  const document = new Element();
+  document.body = new Element();
+  document.hidden = false;
+  document.getElementById = get;
+  document.querySelectorAll = () => Array.from({ length: 9 }, () => new Element());
+  document.querySelector = () => get("sound-card");
+  document.createElement = () => new Element();
+  document.createDocumentFragment = () => Object.assign(new Element(), { fragment: true });
+  const window = new Element();
+  const timers = new Map();
+  let now = 0;
+  let nextTimer = 0;
+  const addTimer = (fn, delay, interval = false) => {
+    const id = ++nextTimer;
+    timers.set(id, { fn, at: now + delay, interval: interval ? delay : null });
+    return id;
+  };
+  window.setTimeout = (fn, delay) => addTimer(fn, delay);
+  window.setInterval = (fn, delay) => addTimer(fn, delay, true);
+  window.clearTimeout = window.clearInterval = (id) => timers.delete(id);
+  const spoken = [];
+  if (audio) {
+    window.SpeechSynthesisUtterance = class { constructor(value) { this.text = value; } };
+    window.speechSynthesis = { cancel() {}, speak(utterance) { spoken.push(utterance); } };
+  }
+  const requests = [];
+  const localStorage = {
+    getItem() { return storage; },
+    setItem(_key, value) { storage = value; },
+  };
+  const context = vm.createContext({
+    window, document, navigator: {}, localStorage, performance: { now: () => now },
+    fetch: (url, options) => {
+      if (url === "/api/health") return Promise.resolve(response({ status: "ready" }));
+      if (url.startsWith("/api/history")) return Promise.resolve(response({ results: [] }));
+      const request = { url, options, ...deferred() };
+      requests.push(request);
+      return request.promise;
+    },
+  });
+  vm.runInContext(source, context);
+  const run = (script) => vm.runInContext(script, context);
+  return {
+    get, document, window, spoken, requests, run,
+    get state() { return run("state"); },
+    advance(milliseconds) {
+      const end = now + milliseconds;
+      for (;;) {
+        const next = [...timers.entries()].filter(([, timer]) => timer.at <= end).sort((a, b) => a[1].at - b[1].at)[0];
+        if (!next) break;
+        const [id, timer] = next;
+        now = timer.at;
+        if (timer.interval === null) timers.delete(id); else timer.at += timer.interval;
+        timer.fn();
+      }
+      now = end;
+    },
+  };
+}
+
+async function flush() { for (let index = 0; index < 8; index += 1) await Promise.resolve(); }
+async function start(h, id) {
+  const pending = h.run("startSession()");
+  h.requests.at(-1).resolve(response(session(id)));
+  await pending;
+  h.advance(2100);
+}
+
+test("reset during session creation cannot revive an abandoned run", async () => {
+  const h = harness();
+  const pending = h.run("startSession()");
+  h.run("resetSession()");
+  h.requests[0].resolve(response(session()));
+  await pending;
+  h.advance(15000);
+  assert.equal(h.state.status, "idle");
+  assert.equal(h.state.session, null);
+  assert.equal(h.spoken.length, 0);
+  assert.equal(h.get("start-button").disabled, false);
+  assert.equal(h.get("stage-message").querySelector("strong").textContent, "Ready when you are");
+});
+
+test("out-of-order creation responses preserve the newer session", async () => {
+  const h = harness();
+  const old = h.run("startSession()");
+  h.run("resetSession()");
+  const current = h.run("startSession()");
+  h.requests[1].resolve(response(session("newer")));
+  await current;
+  h.requests[0].resolve(response(session("older")));
+  await old;
+  assert.equal(h.state.session.session_id, "newer");
+  assert.equal(h.state.status, "countdown");
+});
+
+test("stale completion cannot unlock controls or open results in a new run", async () => {
+  const h = harness();
+  await start(h, "older");
+  const completion = h.run("finishSession()");
+  const oldRequest = h.requests.at(-1);
+  h.run("resetSession()");
+  const newer = h.run("startSession()");
+  oldRequest.resolve(response(result()));
+  await completion;
+  assert.equal(h.state.status, "loading");
+  assert.equal(h.get("start-button").disabled, true);
+  assert.equal(h.get("results-dialog").open, false);
+  assert.equal(h.state.recommendation, null);
+  h.requests.at(-1).resolve(response(session("newer")));
+  await newer;
+});
+
+test("pause freezes responses and resumes the same remaining window without replay", async () => {
+  const h = harness();
+  await start(h);
+  h.advance(3300); // Trial 3, 300ms into its 1500ms response window.
+  h.run("registerResponse('visual')");
+  h.run("pauseSession()");
+  const remaining = h.state.remaining;
+  const played = h.spoken.length;
+  assert.equal(remaining, 1200);
+  h.run("registerResponse('audio')");
+  h.advance(90000);
+  assert.equal(h.state.currentIndex, 2);
+  assert.equal(h.state.audioResponses.size, 0);
+  assert.equal(h.get("visual-feedback").textContent, "Right");
+  assert.equal(h.get("visual-match").classList.contains("correct"), true);
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
+  h.run("resumeSession()");
+  assert.equal(h.spoken.length, played);
+  assert.equal(h.get("visual-feedback").textContent, "Right");
+  h.advance(remaining - 1);
+  assert.equal(h.state.currentIndex, 2);
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
+  h.advance(1);
+  assert.equal(h.state.currentIndex, 3);
+  assert.equal(h.spoken.length, played + 1);
+  assert.equal(h.get("visual-feedback").textContent, "A");
+  assert.equal(h.get("last-visual-result").textContent, "Position: correct match");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: missed match");
+});
+
+test("opening appearance pauses practice and its input cannot mark matches", async () => {
+  const h = harness();
+  await start(h);
+  h.advance(3300);
+  h.get("appearance-button").emit("click");
+  assert.equal(h.state.status, "paused");
+  assert.equal(h.state.remaining, 1200);
+  const index = h.state.currentIndex;
+  const requestCount = h.requests.length;
+  h.window.emit("keydown", { key: "a", target: { closest: () => h.get("appearance-dialog") } });
+  h.window.emit("keydown", { key: "l", target: { closest: () => h.get("accent-hex") } });
+  h.advance(90000);
+  assert.equal(h.state.currentIndex, index);
+  assert.equal(h.state.visualResponses.size, 0);
+  assert.equal(h.state.audioResponses.size, 0);
+  assert.equal(h.requests.length, requestCount);
+  h.run("resumeSession()");
+  h.advance(1199);
+  assert.equal(h.state.currentIndex, index);
+  h.advance(1);
+  assert.equal(h.state.currentIndex, index + 1);
+});
+
+test("a real N-back match gets immediate feedback only on the pressed channel", async () => {
+  const h = harness();
+  await start(h);
+  h.advance(3000); // Cue 3 repeats cue 1 in both channels, but differs from cue 2.
+  const played = h.spoken.length;
+  h.run("registerResponse('visual')");
+  assert.equal(h.get("visual-feedback").textContent, "Right");
+  assert.equal(h.get("visual-response-detail").textContent, "Repeated position");
+  assert.equal(h.get("visual-match").classList.contains("correct"), true);
+  assert.equal(h.get("visual-match").classList.contains("registered"), true);
+  assert.equal(h.get("visual-match").attributes["aria-pressed"], "true");
+  assert.equal(h.get("audio-feedback").textContent, "L");
+  assert.equal(h.get("audio-match").classList.contains("correct"), false);
+  assert.equal(h.get("audio-match").attributes["aria-pressed"], "false");
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
+  h.run("registerResponse('visual'); registerResponse('audio')");
+  assert.equal(h.state.visualResponses.size, 1);
+  assert.equal(h.state.audioResponses.size, 1);
+  assert.equal(h.get("audio-feedback").textContent, "Right");
+  assert.equal(h.get("audio-response-detail").textContent, "Repeated letter");
+  assert.equal(h.spoken.length, played); // Verdicts never speak over the stimulus.
+});
+
+test("in-game start, pause, and reset mirror session controls for expanded view", async () => {
+  const h = harness();
+  h.get("game-start").emit("click");
+  assert.equal(h.state.status, "loading");
+  assert.equal(h.get("game-start").disabled, true);
+  h.requests[0].resolve(response(session()));
+  await flush();
+  h.advance(2100);
+  assert.equal(h.get("game-pause").disabled, false);
+  h.get("game-pause").emit("click");
+  assert.equal(h.state.status, "paused");
+  assert.equal(h.get("game-pause").textContent, "Resume");
+  assert.equal(h.get("pause-button").textContent, "Resume");
+  h.get("game-pause").emit("click");
+  assert.equal(h.state.status, "running");
+  h.get("game-reset").emit("click");
+  assert.equal(h.state.status, "idle");
+  assert.equal(h.get("game-start").disabled, false);
+  assert.equal(h.get("game-start").textContent, "Start session");
+  assert.equal(h.get("game-pause").disabled, true);
+});
+
+test("view changes and Motivation pause active trials without losing progress", async () => {
+  for (const [id, event] of [["expand-game", "click"], ["fullscreen-game", "click"], ["game-size", "input"], ["motivation-button", "click"]]) {
+    const h = harness();
+    await start(h);
+    h.advance(3300);
+    h.get(id).emit(event);
+    assert.equal(h.state.status, "paused", id);
+    assert.equal(h.state.remaining, 1200);
+    h.advance(90000);
+    assert.equal(h.state.currentIndex, 2);
+  }
+});
+
+test("a wrong position mark and right sound mark receive independent verdicts", async () => {
+  const h = harness();
+  await start(h);
+  h.advance(4500); // Cue 4 has a new position, but repeats cue 2's letter.
+  h.run("registerResponse('visual')");
+  assert.equal(h.get("visual-feedback").textContent, "Wrong");
+  assert.equal(h.get("visual-response-detail").textContent, "Did not repeat");
+  assert.equal(h.get("visual-match").classList.contains("incorrect"), true);
+  assert.equal(h.get("visual-match").classList.contains("correct"), false);
+  assert.equal(h.get("audio-feedback").textContent, "L");
+  h.run("registerResponse('audio'); registerResponse('visual')");
+  assert.equal(h.get("audio-feedback").textContent, "Right");
+  assert.equal(h.get("audio-match").classList.contains("correct"), true);
+  assert.equal(h.state.visualResponses.size, 1);
+  h.advance(1500);
+  assert.equal(h.get("review-label").textContent, "Cue 4 result");
+  assert.equal(h.get("last-visual-result").textContent, "Position: wrong match");
+  assert.equal(h.get("last-visual-result").dataset.outcome, "incorrect");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: correct match");
+  assert.equal(h.get("last-audio-result").dataset.outcome, "correct");
+  assert.equal(h.get("visual-match").classList.contains("incorrect"), false);
+  assert.equal(h.get("visual-feedback").textContent, "A");
+  assert.equal(h.get("visual-response-detail").textContent, "Same square, N steps ago");
+});
+
+test("wrong sound marks use letter comparison rather than position comparison", async () => {
+  const h = harness();
+  const pending = h.run("startSession()");
+  const cues = session();
+  cues.trials[2].letter = "H";
+  h.requests[0].resolve(response(cues));
+  await pending;
+  h.advance(5100);
+  h.run("registerResponse('audio')");
+  assert.equal(h.get("audio-feedback").textContent, "Wrong");
+  assert.equal(h.get("audio-response-detail").textContent, "Did not repeat");
+  assert.equal(h.get("audio-match").classList.contains("incorrect"), true);
+  assert.equal(h.get("visual-feedback").textContent, "A");
+  h.advance(1500);
+  assert.equal(h.get("last-audio-result").textContent, "Sound: wrong match");
+  assert.equal(h.get("last-audio-result").dataset.outcome, "incorrect");
+  assert.equal(h.get("last-visual-result").textContent, "Position: missed match");
+});
+
+test("warm-up cues ignore input and never create a scored review", async () => {
+  const h = harness();
+  await start(h);
+  h.run("registerResponse('visual'); registerResponse('audio')");
+  h.advance(1500);
+  h.run("registerResponse('visual'); registerResponse('audio')");
+  h.advance(1500);
+  assert.equal(h.state.currentIndex, 2);
+  assert.equal(h.state.visualResponses.size, 0);
+  assert.equal(h.state.audioResponses.size, 0);
+  assert.equal(h.get("visual-feedback").textContent, "A");
+  assert.equal(h.get("audio-feedback").textContent, "L");
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
+  assert.equal(h.get("last-visual-result").dataset.outcome, "neutral");
+  assert.equal(h.get("last-audio-result").dataset.outcome, "neutral");
+});
+
+test("misses and correct passes appear only when their response window closes", async () => {
+  const h = harness();
+  await start(h);
+  h.advance(4499);
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
+  assert.equal(h.get("visual-feedback").textContent, "A");
+  assert.equal(h.get("audio-feedback").textContent, "L");
+  h.advance(1);
+  assert.equal(h.get("review-label").textContent, "Cue 3 result");
+  assert.equal(h.get("last-visual-result").textContent, "Position: missed match");
+  assert.equal(h.get("last-visual-result").dataset.outcome, "missed");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: missed match");
+  h.advance(1499);
+  assert.equal(h.get("review-label").textContent, "Cue 3 result");
+  h.advance(1);
+  assert.equal(h.get("review-label").textContent, "Cue 4 result");
+  assert.equal(h.get("last-visual-result").textContent, "Position: correct pass");
+  assert.equal(h.get("last-visual-result").dataset.outcome, "correct");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: missed match");
+  assert.equal(h.get("visual-feedback").textContent, "A");
+  assert.equal(h.get("audio-feedback").textContent, "L");
+});
+
+test("the final cue is reviewed before scoring and a new session clears its review", async () => {
+  const h = harness();
+  await start(h);
+  h.advance(6000);
+  h.run("registerResponse('visual')");
+  h.advance(1500);
+  assert.equal(h.state.status, "submitting");
+  assert.equal(h.get("review-label").textContent, "Cue 5 result");
+  assert.equal(h.get("last-visual-result").textContent, "Position: correct match");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: missed match");
+  h.requests.at(-1).resolve(response(result()));
+  await flush();
+  h.get("close-results").emit("click");
+  assert.equal(h.get("results-dialog").open, false);
+  assert.equal(h.get("review-label").textContent, "Cue 5 result");
+  const pending = h.run("startSession()");
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
+  assert.equal(h.get("last-visual-result").textContent, "Position: —");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: —");
+  assert.equal(h.get("last-visual-result").dataset.outcome, "neutral");
+  h.requests.at(-1).resolve(response(session("next-session")));
+  await pending;
+});
+
+test("hidden tabs pause during countdown and require an explicit resume", async () => {
+  const h = harness();
+  const pending = h.run("startSession()");
+  h.requests[0].resolve(response(session()));
+  await pending;
+  h.advance(200);
+  h.document.hidden = true;
+  h.document.emit("visibilitychange");
+  h.advance(90000);
+  assert.equal(h.state.status, "paused");
+  assert.equal(h.state.currentIndex, -1);
+  h.document.hidden = false;
+  h.document.emit("visibilitychange");
+  assert.equal(h.state.status, "paused");
+  h.run("resumeSession()");
+  h.advance(1900);
+  assert.equal(h.state.currentIndex, 0);
+});
+
+test("audio failures pause the timer and tell the player what happened", async () => {
+  const h = harness();
+  await start(h);
+  h.spoken.at(-1).onerror({ error: "not-allowed" });
+  h.advance(10000);
+  assert.equal(h.state.status, "paused");
+  assert.equal(h.state.currentIndex, 0);
+  assert.match(h.get("toast").textContent, /could not play/);
+  assert.equal(h.get("sound-state").textContent, "Audio needs attention");
+});
+
+test("unsupported audio prevents a visual-only session from starting", async () => {
+  const h = harness({ audio: false });
+  await h.run("startSession()");
+  assert.equal(h.state.status, "idle");
+  assert.equal(h.requests.length, 0);
+  assert.match(h.get("toast").textContent, /spoken letters/);
+});
+
+test("a complete session submits both channels once and displays the saved result", async () => {
+  const h = harness();
+  await start(h);
+  h.run("registerResponse('visual')"); // Warm-up responses must be ignored.
+  h.advance(3000);
+  h.run("registerResponse('visual'); registerResponse('visual'); registerResponse('audio')");
+  h.advance(4500);
+  assert.equal(h.state.status, "submitting");
+  assert.equal(h.requests.length, 2);
+  assert.deepEqual(JSON.parse(h.requests[1].options.body), { visual_responses: [2], audio_responses: [2] });
+  h.requests[1].resolve(response(result()));
+  await flush();
+  assert.equal(h.state.status, "finished");
+  assert.equal(h.get("results-dialog").open, true);
+  assert.equal(h.get("result-accuracy").textContent, "85%");
+  assert.equal(h.get("time-remaining").textContent, "00:00");
+  assert.equal(h.get("start-button").disabled, false);
+  assert.equal(h.document.body.classList.contains("session-active"), false);
+});
+
+test("reset clears response marks and all active timers", async () => {
+  const h = harness();
+  await start(h);
+  h.advance(3000);
+  h.run("registerResponse('visual'); registerResponse('audio')");
+  h.advance(1500);
+  h.run("registerResponse('visual'); registerResponse('audio'); resetSession()");
+  h.advance(90000);
+  assert.equal(h.state.currentIndex, -1);
+  assert.equal(h.get("visual-feedback").textContent, "A");
+  assert.equal(h.get("audio-feedback").textContent, "L");
+  assert.equal(h.get("visual-match").attributes["aria-pressed"], "false");
+  assert.equal(h.get("visual-match").classList.contains("incorrect"), false);
+  assert.equal(h.get("audio-match").classList.contains("correct"), false);
+  assert.equal(h.get("review-label").textContent, "No scored cues yet");
+  assert.equal(h.get("last-visual-result").textContent, "Position: —");
+  assert.equal(h.get("last-audio-result").textContent, "Sound: —");
+  assert.equal(h.get("last-visual-result").dataset.outcome, "neutral");
+  assert.equal(h.get("last-audio-result").dataset.outcome, "neutral");
+  assert.equal(h.get("trial-current").textContent, "0");
+  assert.equal(h.document.body.classList.contains("session-active"), false);
+  await flush();
+});
+
+test("level controls reach 20 and keep enough scored trials after warm-up", () => {
+  const h = harness();
+  for (let index = 0; index < 25; index += 1) h.get("level-up").emit("click");
+  assert.equal(h.get("n-level").value, "20");
+  assert.equal(h.get("level-display").textContent, "20");
+  assert.equal(h.get("level-up").disabled, true);
+  assert.equal(h.get("rounds").value, "30");
+  assert.match(h.get("level-help").textContent, /20 turns earlier/);
+  assert.equal(h.get("round-details").textContent, "20 warm-up + 10 scored trials");
+  assert.deepEqual(h.get("rounds").options.map(option => option.disabled), [true, true, false, false]);
+  for (let index = 0; index < 15; index += 1) h.get("level-down").emit("click");
+  assert.equal(h.get("level-up").disabled, false);
+  assert.equal(h.get("rounds").options[0].disabled, false);
+});
+
+test("restored high levels correct a short saved length before session creation", async () => {
+  const h = harness({ storage: JSON.stringify({ level: "20", rounds: "12", pace: "2500", volume: "80" }) });
+  assert.equal(h.get("n-level").value, "20");
+  assert.equal(h.get("rounds").value, "30");
+  const pending = h.run("startSession()");
+  assert.deepEqual(JSON.parse(h.requests[0].options.body), { n_level: 20, rounds: 30, interval_ms: 2500 });
+  h.run("resetSession()");
+  h.requests[0].resolve(response(session()));
+  await pending;
+});
+
+test("20-back ignores the first twenty cues and accepts responses on cue twenty-one", async () => {
+  const h = harness({ storage: JSON.stringify({ level: "20", rounds: "30", pace: "2500" }) });
+  const pending = h.run("startSession()");
+  h.requests[0].resolve(response({
+    session_id: "twenty-back", n_level: 20, rounds: 30, interval_ms: 2500,
+    trials: Array.from({ length: 30 }, (_, index) => ({ position: index % 9, letter: index % 2 ? "R" : "C" })),
+  }));
+  await pending;
+  h.advance(2100 + 19 * 2500);
+  h.run("registerResponse('visual'); registerResponse('audio')");
+  assert.equal(h.get("trial-current").textContent, "20");
+  assert.equal(h.state.visualResponses.size, 0);
+  assert.equal(h.state.audioResponses.size, 0);
+  assert.equal(h.get("visual-match").disabled, true);
+  h.advance(2500);
+  h.run("registerResponse('visual'); registerResponse('audio')");
+  assert.equal(h.get("trial-current").textContent, "21");
+  assert.equal(h.get("visual-match").disabled, false);
+  assert.equal(h.state.visualResponses.has(20), true);
+  assert.equal(h.state.audioResponses.has(20), true);
+  h.run("resetSession()");
+});
