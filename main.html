@@ -4,7 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f2f0e9">
-  <meta name="description" content="RECALL: a dual N-back practice space. Track position and sound, compare cues, and review your session.">
+  <meta name="description" content="Dual N-back: a dual N-back practice space. Track position and sound, compare cues, and review your session.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Dual N-back">
+  <meta property="og:description" content="Track position and sound, compare cues, and review your session.">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Dual N-back">
+  <meta name="twitter:description" content="Track position and sound, compare cues, and review your session.">
   <title>Dual N-back</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <script src="/static/appearance.js"></script>
@@ -132,6 +138,7 @@
       <div class="history-heading"><div><p class="eyebrow">After the effort</p><h2 id="history-title">Session log<span class="title-dot">.</span></h2></div><span id="history-summary">Your next session starts the record.</span></div>
       <div class="history-list" id="history-list"><div class="empty-history"><span class="empty-index" aria-hidden="true">— / —</span><div><strong>No sessions on the board. Yet.</strong><p>Finish a session to see your accuracy and matches here.</p></div><span class="empty-label">READY FOR YOUR FIRST REP</span></div></div>
       <div class="history-footnote"><span>* Summary shows up to your six most recent sessions.</span><span>Accuracy = correct match + non-match decisions.</span></div>
+      <details class="history-privacy"><summary>Privacy &amp; saved progress</summary><p>History is stored on the server and linked to this browser by an anonymous cookie that lasts up to one year. It does not sync between devices. Clearing that cookie disconnects this browser from its history; it does not erase the stored results. Theme and game settings stay in your browser.</p></details>
     </section>
     <footer class="site-footer"><span>Made with <span class="footer-heart" role="img" aria-label="love">♥</span><span class="sentence-period">...</span>and HTML and Python.</span><span>If you have suggestions, here is my <a class="contact-link" href="https://github.com/tommyKolencik">Github</a> &amp; <button class="contact-link" id="copy-email" type="button" aria-label="Copy email address thomas.w.kolencik@gmail.com">thomas.w.kolencik@gmail.com</button>.</span><span class="contact-feedback" id="contact-feedback" role="status"></span><input class="email-copy-fallback" id="email-copy-fallback" type="text" value="thomas.w.kolencik@gmail.com" readonly aria-label="Email address to copy manually" hidden></footer>
   </main>
@@ -197,8 +204,41 @@
   <dialog class="motivation-dialog" id="motivation-dialog" aria-labelledby="motivation-title">
     <div class="results-topline"><p class="eyebrow">Behind the project</p><button class="icon-button" id="close-motivation" type="button" aria-label="Close motivation">×</button></div>
     <h2 id="motivation-title">Motivation</h2>
-    <section class="motivation-section" id="motivation-story"><h3>Why I made this</h3><p class="coming-soon">Coming soon.</p></section>
-    <section class="motivation-section" id="motivation-reading"><h3>Reading &amp; research</h3><p class="coming-soon">Article links will be added here.</p></section>
+    <section class="motivation-section" id="motivation-story">
+      <h3>Why I made this</h3>
+      <p>I wanted to improve my memory and discovered Dual N-back. I enjoyed playing it for a while and reached about N = 5. Then I hit a paywall in the app I was using. I tried switching to other apps, but nearly every one I found had a paywall too. I built this website to make the game more accessible.</p>
+    </section>
+    <section class="motivation-section" id="motivation-reading">
+      <h3>Reading &amp; research</h3>
+      <p>If you stumbled across this website, here are a few academic articles exploring the potential benefits of Dual N-back. All credit goes to the authors.</p>
+      <p class="research-context">A quick note: improvements tend to be strongest on n-back and closely related tasks. Broader benefits for memory or intelligence are less certain. These studies did not evaluate this website.</p>
+      <ol class="research-list" aria-label="Research articles">
+        <li class="research-paper">
+          <div class="research-meta"><span>2008 · PNAS</span><span>Early findings</span></div>
+          <h4><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC2383929/" target="_blank" rel="noopener noreferrer">Improving fluid intelligence with training on working memory<span class="sr-only"> (opens in a new tab)</span></a></h4>
+          <p class="research-authors">Susanne M. Jaeggi and colleagues</p>
+          <p>This early study reported gains on reasoning tests after dual n-back training. It helped spark interest in the game, though later research has not consistently found the same broader benefits.</p>
+        </li>
+        <li class="research-paper">
+          <div class="research-meta"><span>2017 · Journal of Cognitive Enhancement</span><span>Related-task gains</span></div>
+          <h4><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC5805159/" target="_blank" rel="noopener noreferrer">N-back versus Complex Span Working Memory Training<span class="sr-only"> (opens in a new tab)</span></a></h4>
+          <p class="research-authors">Kara J. Blacker and colleagues</p>
+          <p>Dual n-back training improved performance on a different n-back task. The researchers also observed changes in brain activity, but found no training-specific improvement on their intelligence test.</p>
+        </li>
+        <li class="research-paper">
+          <div class="research-meta"><span>2021 · Scientific Reports</span><span>Memory-task comparison</span></div>
+          <h4><a href="https://www.nature.com/articles/s41598-021-82663-w" target="_blank" rel="noopener noreferrer">Dual n-back working memory training evinces superior transfer effects compared to the method of loci<span class="sr-only"> (opens in a new tab)</span></a></h4>
+          <p class="research-authors">Wenjuan Li and colleagues</p>
+          <p>Participants improved at recalling digits and responded faster on a demanding visual memory task. The authors note that similarities between the tests and training may have favored n-back.</p>
+        </li>
+        <li class="research-paper">
+          <div class="research-meta"><span>2017 · Psychonomic Bulletin &amp; Review</span><span>The bigger picture</span></div>
+          <h4><a href="https://link.springer.com/article/10.3758/s13423-016-1217-0" target="_blank" rel="noopener noreferrer">Working memory training revisited: A multi-level meta-analysis of n-back training studies<span class="sr-only"> (opens in a new tab)</span></a></h4>
+          <p class="research-authors">Anna Soveri and colleagues</p>
+          <p>Combining 33 randomized controlled trials of n-back training, this review found moderate improvements on other n-back tasks, but only very small effects on other memory, reasoning, and cognitive-control measures.</p>
+        </li>
+      </ol>
+    </section>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>

@@ -1,4 +1,6 @@
-RECALL — Dual N-Back
+Dual N-Back
+Author: Tommy Kolencik
+Last Updated: Sept 8, 2026
 ===================
 
 A full dual N-back training application with a responsive HTML/CSS/JavaScript
@@ -56,8 +58,9 @@ Controls
   Full screen uses browser full screen when supported and falls back to Expand
   otherwise. Start, pause/resume, and reset also live inside the game panel.
   Changing the view pauses an active game; resume explicitly when ready.
-- Tips & Notes is collapsible. Motivation is ready for the author's explanation
-  and chosen academic article links; its content is currently marked coming soon.
+- Tips & Notes is collapsible. Motivation includes the author's story and four
+  credited academic papers, with short findings and limitations. Research links
+  open in a new tab, so the game stays available. These papers did not test this app.
 - The footer's Github and email controls share the selected accent color. Email
   copies thomas.w.kolencik@gmail.com without opening a mail app; if clipboard
   access is unavailable, a selected text field allows manual copying.

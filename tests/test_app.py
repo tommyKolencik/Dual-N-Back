@@ -11,7 +11,7 @@ class NBackAppTests(unittest.TestCase):
         database = tempfile.NamedTemporaryFile(delete=False)
         database.close()
         self.database_path = database.name
-        self.app = create_app({"TESTING": True, "DATABASE": self.database_path})
+        self.app = create_app({"TESTING": True, "DATABASE": self.database_path, "RATE_LIMIT_ENABLED": False})
         self.client = self.app.test_client()
 
     def tearDown(self):
@@ -189,11 +189,13 @@ class NBackAppTests(unittest.TestCase):
         endpoint = f"/api/sessions/{session['session_id']}/complete"
         restarted = create_app({"TESTING": True, "DATABASE": self.database_path})
         client = restarted.test_client()
+        client.set_cookie("nback_visitor", self.client.get_cookie("nback_visitor").value)
         first = client.post(endpoint, json={})
         self.assertEqual(first.status_code, 200)
 
         restarted_again = create_app({"TESTING": True, "DATABASE": self.database_path})
         client = restarted_again.test_client()
+        client.set_cookie("nback_visitor", self.client.get_cookie("nback_visitor").value)
         retry = client.post(endpoint, json={"visual_responses": [2, 3]})
         self.assertEqual(retry.status_code, 200)
         self.assertEqual(retry.json, first.json)
@@ -205,6 +207,7 @@ class NBackAppTests(unittest.TestCase):
 
         def complete(_index):
             with self.app.test_client() as client:
+                client.set_cookie("nback_visitor", self.client.get_cookie("nback_visitor").value)
                 response = client.post(endpoint, json={})
                 return response.status_code, response.json
 

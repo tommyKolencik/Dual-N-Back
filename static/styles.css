@@ -262,6 +262,9 @@ kbd { display: inline-block; min-width: 17px; border: 1px solid var(--line-stron
 .history-date, .history-detail { color: var(--muted); font-size: 10px; }
 .history-accuracy { font: 17px var(--mono); text-align: right; }
 .history-footnote { display: flex; justify-content: space-between; gap: 16px; padding-top: 13px; color: var(--muted); font: 8px/1.5 var(--mono); }
+.history-privacy { margin-top: 16px; max-width: 720px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.history-privacy summary { cursor: pointer; color: var(--ink); }
+.history-privacy p { margin-top: 8px; }
 .site-footer { display: flex; justify-content: space-between; gap: 20px; padding: 30px 0 22px; color: var(--muted); font: 9px var(--mono); }
 
 dialog { color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 7px; width: min(510px, calc(100% - 32px)); max-height: calc(100dvh - 40px); padding: 30px; box-shadow: 0 25px 100px #111c1355; }
@@ -596,6 +599,18 @@ dialog h2 { font-size: 35px; font-weight: 500; letter-spacing: -.05em; line-heig
 .motivation-section h3 { font-size: 17px; font-weight: 600; }
 .motivation-section p { font-size: 14px; line-height: 1.7; color: var(--muted); margin-top: 10px; }
 .motivation-section a { color: var(--accent-ink); text-decoration: underline; }
+.motivation-dialog { width: min(720px, calc(100% - 32px)); }
+.motivation-section .research-context { padding: 14px 16px; background: var(--surface-muted); border-left: 3px solid var(--accent-border); border-radius: 3px; font-size: 12px; }
+.research-list { list-style: none; padding: 0; margin: 22px 0 0; }
+.research-paper { padding: 19px 0; border-top: 1px solid var(--line); }
+.research-paper:last-child { padding-bottom: 0; }
+.research-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font: 10px/1.6 var(--mono); }
+.research-meta > span:last-child { color: var(--accent-ink); }
+.research-paper h4 { margin: 10px 0 0; font-size: 15px; font-weight: 600; line-height: 1.55; }
+.research-paper h4 a { text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.research-paper h4 a:hover { text-decoration-thickness: 2px; }
+.motivation-section .research-authors { font-size: 11px; margin-top: 6px; }
+.research-paper p:not(.research-authors) { font-size: 13px; line-height: 1.7; margin-top: 9px; }
 
 @media (max-width: 760px) {
   .site-header { gap: 16px; }

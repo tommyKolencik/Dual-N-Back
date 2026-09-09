@@ -1,4 +1,4 @@
-"""Flask backend for the RECALL dual N-back trainer."""
+"""Flask backend for the Dual N-back trainer."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, g, jsonify, request, send_file
+
+from security import register_security
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -28,6 +30,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         DATABASE=os.environ.get("NBACK_DATABASE", str(BASE_DIR / "nback.db")),
         JSON_SORT_KEYS=False,
         SESSION_TTL_SECONDS=24 * 60 * 60,
+        MAX_CONTENT_LENGTH=16 * 1024,
+        VISITOR_COOKIE_SECURE=os.environ.get("NBACK_COOKIE_SECURE") == "1",
+        PUBLIC_ORIGIN=os.environ.get("NBACK_PUBLIC_ORIGIN", "").rstrip("/"),
+        TRUSTED_HOSTS=[host.strip() for host in os.environ.get("NBACK_TRUSTED_HOSTS", "").split(",") if host.strip()] or None,
+        RATE_LIMIT_ENABLED=True,
+        RATE_LIMITS={"create": (30, 300), "complete": (90, 900), "history": (120, 1200)},
     )
     if test_config:
         app.config.update(test_config)
@@ -40,6 +48,9 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     def init_db() -> None:
         database = get_db()
+        # Serialize startup migrations across workers; never attribute legacy
+        # shared records to the first public visitor or remove existing scores.
+        database.execute("BEGIN IMMEDIATE")
         database.execute(
             """
             CREATE TABLE IF NOT EXISTS results (
@@ -66,7 +77,21 @@ def create_app(test_config: dict | None = None) -> Flask:
             )
             """
         )
+        for table in ("results", "sessions"):
+            columns = {row["name"] for row in database.execute(f"PRAGMA table_info({table})")}
+            if "visitor_id" not in columns:
+                database.execute(f"ALTER TABLE {table} ADD COLUMN visitor_id TEXT")
+        database.execute("CREATE INDEX IF NOT EXISTS idx_results_visitor_id_id ON results (visitor_id, id)")
+        database.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at)")
+        database.execute(
+            "CREATE TABLE IF NOT EXISTS rate_limits ("
+            "bucket TEXT PRIMARY KEY, expires_at REAL NOT NULL, hits INTEGER NOT NULL)"
+        )
+        database.execute("CREATE INDEX IF NOT EXISTS idx_rate_limits_expires_at ON rate_limits (expires_at)")
         database.commit()
+        database.execute("PRAGMA optimize")
+
+    register_security(app, get_db)
 
     @app.teardown_appcontext
     def close_db(_error: BaseException | None) -> None:
@@ -80,7 +105,13 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.get("/api/health")
     def health():
+        get_db().execute("SELECT 1 FROM results LIMIT 1").fetchone()
         return jsonify({"status": "ready"})
+
+    @app.errorhandler(sqlite3.OperationalError)
+    def database_unavailable(error):
+        app.logger.error("Database operation failed: %s", error)
+        return jsonify(error="Saved sessions are temporarily unavailable. Please try again shortly."), 503
 
     @app.post("/api/sessions")
     def create_session():
@@ -120,11 +151,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         with database:
             database.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
             database.execute(
-                "INSERT INTO sessions (session_id, expires_at, data) VALUES (?, ?, ?)",
+                "INSERT INTO sessions (session_id, expires_at, data, visitor_id) VALUES (?, ?, ?, ?)",
                 (
                     session_id,
                     now + app.config["SESSION_TTL_SECONDS"],
                     json.dumps(session),
+                    g.visitor_id,
                 ),
             )
         return jsonify(
@@ -150,8 +182,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         with database:
             database.execute("BEGIN IMMEDIATE")
             row = database.execute(
-                "SELECT data, result FROM sessions WHERE session_id = ? AND expires_at > ?",
-                (session_id, time.time()),
+                "SELECT data, result FROM sessions WHERE session_id = ? AND expires_at > ? AND visitor_id = ?",
+                (session_id, time.time(), g.visitor_id),
             ).fetchone()
             if row is None:
                 return jsonify({"error": "This session is no longer available."}), 404
@@ -176,8 +208,8 @@ def create_app(test_config: dict | None = None) -> Flask:
                 INSERT INTO results (
                     completed_at, n_level, rounds, accuracy,
                     visual_hits, visual_targets, audio_hits, audio_targets,
-                    false_alarms
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    false_alarms, visitor_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     datetime.now(timezone.utc).isoformat(),
@@ -189,6 +221,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                     result["audio"]["hits"],
                     result["audio"]["targets"],
                     result["false_alarms"],
+                    g.visitor_id,
                 ),
             )
             database.execute(
@@ -210,10 +243,11 @@ def create_app(test_config: dict | None = None) -> Flask:
                    visual_hits, visual_targets, audio_hits, audio_targets,
                    false_alarms
             FROM results
+            WHERE visitor_id = ?
             ORDER BY id DESC
             LIMIT ?
             """,
-            (limit,),
+            (g.visitor_id, limit),
         ).fetchall()
         return jsonify({"results": [dict(row) for row in rows]})
 
@@ -346,4 +380,4 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5001, debug=True)
+    app.run(host="127.0.0.1", port=5001, debug=False)
