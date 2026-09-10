@@ -2,3 +2,11 @@ venv/
 __pycache__/
 *.pyc
 nback.db
+*.db-journal
+*.db-wal
+*.db-shm
+backups/
+release/
+.env
+.env.*
+!.env.example

@@ -127,12 +127,34 @@ test("clipboard failure offers selected, accessible text without claiming succes
   }
 });
 
-test("Motivation opens and closes without invented research links", async () => {
+test("Motivation opens and closes with the author's story and credited research", async () => {
   const h = harness();
   await h.get("motivation-button").emit("click");
   assert.equal(h.get("motivation-dialog").open, true);
   await h.get("close-motivation").emit("click");
   assert.equal(h.get("motivation-dialog").open, false);
   assert.match(html, /id="motivation-reading"/);
-  assert.match(html, /Article links will be added here/);
+  assert.match(html, /I enjoyed playing it for a while and reached about N = 5/);
+  assert.match(html, /All credit goes to the authors/);
+  assert.doesNotMatch(html, /Article links will be added here|class="coming-soon"/);
+});
+
+test("Motivation contains four attributed academic papers with safe external links and evidence limits", () => {
+  const papers = [...html.matchAll(/<li class="research-paper">([\s\S]*?)<\/li>/g)].map((match) => match[1]);
+  assert.equal(papers.length, 4);
+  const expectedUrls = [
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC2383929/",
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC5805159/",
+    "https://www.nature.com/articles/s41598-021-82663-w",
+    "https://link.springer.com/article/10.3758/s13423-016-1217-0",
+  ];
+  papers.forEach((paper, index) => {
+    assert.ok(paper.includes(`href="${expectedUrls[index]}"`));
+    assert.match(paper, /target="_blank" rel="noopener noreferrer"/);
+    assert.match(paper, /opens in a new tab/);
+    assert.match(paper, /class="research-authors">[^<]+ and colleagues<\/p>/);
+    assert.match(paper, /class="research-meta"/);
+  });
+  assert.match(html, /Broader benefits for memory or intelligence are less certain/);
+  assert.match(html, /These studies did not evaluate this website/);
 });
