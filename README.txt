@@ -70,14 +70,71 @@ Session details
 
 Each stream includes a balanced selection of repeat targets. Python calculates
 accuracy from both correct matches and correct non-matches, excluding warm-up.
-History is stored on this server, shared by browsers using this installation.
+History is stored on this server and isolated by a random, host-only browser
+cookie (HttpOnly, SameSite=Lax; Secure over HTTPS). The database stores only a hash
+of that cookie. There are no accounts or cross-device synchronization. Clearing
+the cookie or letting it expire after one year loses access to that history;
+it does not delete the stored scores. Do not share browser profiles for private
+history. Backups also contain scores and should be kept private.
+
+Old shared records are preserved by the schema migration with no assigned
+visitor. They are intentionally not shown to anyone and cannot be claimed via
+the public API. The migration is transactional and safe to run again.
 Sessions are stored in SQLite for 24 hours so a scoring retry or server restart
 does not duplicate a completed result. Reloading the page abandons in-page play.
 The top summary uses the six most recent completed sessions, not lifetime totals.
 
-The local development server is at http://127.0.0.1:5001. For deployment, use a
-Python WSGI host with main:app and a persistent writable path for NBACK_DATABASE.
-Flask's debug server should remain for local development only.
+The local development server is at http://127.0.0.1:5001. Debugging is off by
+default. Production uses wsgi:application (or main:app), never python main.py.
+
+Free hosting
+------------
+
+See deploy/FREE_HOSTING.md for the PythonAnywhere Beginner setup. This keeps the
+Python backend and SQLite on persistent storage without a hosting subscription.
+The free address is YOUR_USERNAME.pythonanywhere.com (or the EU equivalent).
+PythonAnywhere requires a paid plan for custom domains, and domain registration
+is a separate cost. The free web app must be renewed manually each month.
+
+The host's managed WSGI server runs the app; no Gunicorn dependency is required
+for PythonAnywhere. Use the supplied configuration example, private data path,
+exact allowed hostname/origin, Secure cookies and the dashboard's Force HTTPS.
+
+Public-server safeguards
+-----------------------
+
+- POST bodies are limited to 16 KiB; cross-site writes and non-JSON submissions
+  are rejected. Personal page/API responses are not cached.
+- Browser security headers restrict script sources and prevent framing. Inline
+  styles remain allowed for the existing theme and board-size controls.
+- SQLite-backed fixed-minute limits apply across workers and restarts. Defaults
+  are 30 new sessions, 90 completion requests, and 120 history requests per
+  network per minute, with global limits ten times those values. They return
+  JSON 429 plus Retry-After. These are basic safeguards, not DDoS protection.
+- Forwarded IP headers are not trusted by the app. A hosting proxy must provide
+  a trustworthy REMOTE_ADDR; otherwise visitors behind that proxy share a limit.
+  Limits use short-lived hashed network identifiers. The hosting provider may
+  retain separate access logs; review its privacy policy before public launch.
+- Expired game sessions and rate-limit buckets are cleaned during requests.
+  Completed scores are retained; monitor the free account's disk usage.
+- /api/health checks database access. Database failures return a safe 503 error
+  without exposing internal paths or queries.
+
+Backups
+-------
+
+Run this with the virtual environment active; choose a NEW destination filename:
+
+   python scripts/backup_db.py /private/path/nback.db /private/path/backup-YYYY-MM-DD.db
+
+It uses SQLite's online backup API, checks the backup, gives it owner-only file
+permissions and refuses to overwrite existing files. Download a copy off the
+hosting account. Keep all database files outside static/ and the public web root.
+New free PythonAnywhere accounts do not include scheduled tasks, so backups and
+monthly renewals are manual unless you separately arrange an external scheduler.
+Create a backup before updates or migrations. To restore: stop the web app,
+preserve the current database, point NBACK_DATABASE at a verified restored copy,
+then reload and check /api/health. Do not overwrite a database while it is live.
 
 Run tests
 ---------

@@ -38,7 +38,7 @@ def register_security(app, get_db):
             category = "create"
         elif request.method == "POST" and request.endpoint == "complete_session":
             category = "complete"
-        elif request.method == "GET" and request.path == "/api/history":
+        elif request.method in ("GET", "HEAD") and request.path == "/api/history":
             category = "history"
         if category and app.config["RATE_LIMIT_ENABLED"]:
             retry_after = _rate_limit(app, get_db(), category)
